@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+        "target": "es2017",
+        "lib": [
+            "es2017"
+        ],
+        "types": [
+            "reflect-metadata"
+        ],
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
+        "module": "commonjs",
+        "moduleResolution": "node",
+        "alwaysStrict": true,
+        "sourceMap": true,
+        "forceConsistentCasingInFileNames": true,
+        "noFallthroughCasesInSwitch": true,
+        "strictNullChecks": true,
+        "esModuleInterop": true,
+        "strictNullChecks": false
+    },
+    "include": [
+        "src/**/*",
+    ]
+}

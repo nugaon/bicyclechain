@@ -1,0 +1,6 @@
+node_modules/
+logs/
+dist/
+src/environments/*
+!src/environments/environment.example.ts
+.ftpconfig

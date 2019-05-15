@@ -1,0 +1,57 @@
+/**
+ * This starter project recommended using Microsoft TSLint rules.
+ * Please see https://github.com/Microsoft/tslint-microsoft-contrib for more details.
+ * https://palantir.github.io/tslint/rules
+ */
+
+{
+	"rules": {
+		"export-name": false,
+		"function-name": false,
+		"insecure-random": false,
+		"max-func-body-length": false,
+		"missing-jsdoc": false,
+		"mocha-no-side-effect-code": false,
+		"no-increment-decrement": false,
+		"no-void-expression": false,
+		"no-redundant-jsdoc": false,
+		"no-relative-imports": false,
+		"no-reserved-keywords": false,
+		"no-any": false,
+		"no-unused-variable": false,
+		"prefer-type-cast": false,
+		"promise-function-async": false,
+		"quotemark": [true, "double"],
+		"semicolon": [true, "always"],
+		"no-implicit-dependencies": false,
+		"no-import-side-effect": false,
+		"indent": false,
+		"trailing-comma": [
+			true,
+			{
+				"singleline": "never"
+			}
+		],
+		"array-type": [true, "generic"],
+		"prefer-array-literal": false,
+		"no-empty": false,
+		"no-default-export": false,
+		"no-parameter-properties": false,
+		"interface-name": [true, "never-prefix"],
+		"no-unnecessary-class": false,
+		"prefer-object-spread": false,
+		"variable-name": false,
+		"member-ordering": false,
+		"no-console": false,
+		"no-backbone-get-set-outside-model": false,
+		"no-single-line-block-comment": false,
+		"mocha-unneeded-done": false,
+
+		"typedef": [
+			true,
+			"parameter",
+			"property-declaration",
+			"member-variable-declaration"
+		]
+	}
+}

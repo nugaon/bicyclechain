@@ -1,0 +1,12 @@
+{
+    "out": "docs",
+    "theme": "default",
+    "ignoreCompilerErrors": "true",
+    "experimentalDecorators": "true",
+    "emitDecoratorMetadata": "true",
+    "target": "ES6",
+    "preserveConstEnums": "true",
+    "mode": "file",
+    "name": "Bicycle Chain Documentation",
+    "tsconfig": "tsconfig.json"
+}
