@@ -142,7 +142,7 @@ export class BitcoinService {
 
     public async getAccountTransaction(addressOrAccount: string, txid: string): Promise<ITransaction> {
         try {
-            const transaction: IBitcoinTransactionNative = await this.client.getTransaction(txid);
+            let transaction: IBitcoinTransactionNative = await this.client.getTransaction(txid);
             let addressGiven: boolean = await this.isAddress(addressOrAccount);
             //category decision
             let category: "SEND" | "RECEIVE" | "OTHER";
@@ -154,6 +154,7 @@ export class BitcoinService {
                 for (const detail of transaction.details) {
                     if((addressGiven && detail.address.toLowerCase() === addressOrAccount.toLowerCase())
                     || detail.account === addressOrAccount) {
+                        transaction.amount = detail.amount + "";
                         switch (detail.category) {
                             case "send":
                                 category = "SEND";

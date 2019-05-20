@@ -78,7 +78,7 @@ export class CapricoinService {
 
     public async getAccountTransaction(addressOrAccount: string, txid: string): Promise<ITransaction> {
         try {
-            const transaction = await this.getNativeTransaction(txid);
+            let transaction = await this.getNativeTransaction(txid);
             let addressGiven: boolean = await this.isAddress(addressOrAccount);
             //category decision
             let category: "SEND" | "RECEIVE" | "OTHER";
@@ -90,6 +90,7 @@ export class CapricoinService {
                 for (const detail of transaction.details) {
                     if((addressGiven && detail.address.toLowerCase() === addressOrAccount.toLowerCase())
                     || detail.account === addressOrAccount) {
+                        transaction.amount = detail.amount + "";
                         switch (detail.category) {
                             case "send":
                                 category = "SEND";
