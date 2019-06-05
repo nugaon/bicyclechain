@@ -7,7 +7,6 @@ import { default as TronWeb } from 'tronweb';
 import { sendedTransaction, trxTransaction, block, createdAccount, extendedTransaction } from "./ITron";
 import { TronDB, IAccount } from "./TronDB";
 import * as cron from "node-cron";
-import { AsyncForeach } from "../../generic/AsyncForeach";
 
 export class TronService {
 
@@ -246,8 +245,6 @@ export class TronService {
                 let loopBlockNumber = loopBlock.block_header.raw_data.number;
                 const recentBlockNumber = loopBlockNumber; //after the transactions check this value overwrite the lastBlockNumberAtCallback value
                 while(loopBlockNumber > this.lastBlockNumberAtCallback) {
-                    console.log("loopBlockNumber", loopBlockNumber);
-
                     //gather txids which affected the application's accounts.
                     const ownTxIds: Array<string> = []; //txids of the transactions which affect the accounts that the application handles
                     if(loopBlock.transactions) {
