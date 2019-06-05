@@ -98,7 +98,7 @@ export class RippleController implements ICryptoCurrency {
         }
         if(priority) {
             options["priority"] = priority;
-	}
+	    }
 
         if(sender) {
             if(!password) {

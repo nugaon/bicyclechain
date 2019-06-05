@@ -118,11 +118,6 @@ Payload:
 ```
 
 # Usage
-Before you run the BicycleChain, you must do the following:
-- set your own environment configuration file
-- install application dependencies
-> npm i
-
 The application is designed for internal network usage, do not run on public server.
 
 ## Wallet Change Callback
@@ -168,6 +163,9 @@ localnodeConfigs: {
 The blockchain nodes configuration can differ from one another. You can find the exact structure for the correct setup one-by-one in the *src/application/localnodes/{localnode}/ILocalNodeConfig.ts*.
 
 ## Run the application
+Install lib dependencies that the node packages use
+> sudo apt-get install -y python build-essential
+
 Run the application with PM2 (or with any other alternative which can build NodeJS Typescript code).
 
 For PM2 you should install the typescript module with
@@ -176,7 +174,7 @@ For PM2 you should install the typescript module with
 Install node packages
 > npm i
 
-then you can start the BicycleChain with PM2
+Set your own environment configuration file (in src/environments/environment.ts), then you can start the BicycleChain with PM2
 > pm2 start src/init.ts --name BicycleChain
 
 # Contribution

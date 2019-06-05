@@ -48,6 +48,8 @@ export interface IGenerateAccount {
     address: string;
     additionalInfo?: {
         password?: string;
+        privateKey?: string; //TRON
+        publicKey?: string; //TRON
     }
 }
 

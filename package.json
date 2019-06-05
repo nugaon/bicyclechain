@@ -42,6 +42,7 @@
         "node-cron": "^2.0.3",
         "request-promise-native": "^1.0.7",
         "ripple-lib": "^1.2.3",
+        "tronweb": "^2.5.6",
         "web3": "^1.0.0-beta.52",
         "winston": "^3.2.1",
         "winston-daily-rotate-file": "^3.8.0"

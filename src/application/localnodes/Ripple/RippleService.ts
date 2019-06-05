@@ -2,7 +2,6 @@ import { environment } from "../../../environments/environment";
 import { ILocalNodeConfig as Config } from "./ILocalNodeConfig";
 import { RippleAPI } from "ripple-lib";
 import {default as rp } from "request-promise-native";
-import * as util from "util";
 import { DataApiAccountPaments } from "./DataApiResponses";
 import { ITransactionEvent } from "./IRipple";
 import { RippleDB, IPaymentTransaction } from "./RippleDB";

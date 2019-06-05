@@ -16,7 +16,7 @@ export class RippleDB {
         this.connectionUri = environment.localnodeConfigs.Ripple.mongoDB.connectionUri;
         try {
             this.client = await createConnection(this.connectionUri, { useNewUrlParser: true });
-            console.log(`\n\t[XRP] Service connected to database: ${this.connectionUri}`);
+            console.log(`[XRP] Service connected to database: ${this.connectionUri}`);
             this.initModels();
         }
         catch(e) {

@@ -4,6 +4,8 @@ import { CapricoinController } from "../../application/localnodes/Capricoin/Capr
 import { EthereumController } from "../../application/localnodes/Ethereum/EthereumController";
 import { LitecoinController } from "../../application/localnodes/Litecoin/LitecoinController";
 import { RippleController } from "../../application/localnodes/Ripple/RippleController";
+import { TronController } from "../../application/localnodes/TRON/TronController";
+
 /**
  * Contains all local node api's controllers which are implemented.
  */
@@ -20,7 +22,8 @@ export class LocalNodeControllerRegistry {
         Litecoin: LitecoinController,
         Ethereum: EthereumController,
         Capricoin: CapricoinController,
-        Ripple: RippleController
+        Ripple: RippleController,
+        TRON: TronController
     };
 
     /**
