@@ -12,6 +12,10 @@ export interface ILocalNodeConfig {
     walletChangeCallback?: { //if transaction happens with the main address, make a callback to the given URI
         callbackUri: string;
         enabled: boolean;
+        cron: { // set scheduled callbacks  https://github.com/merencia/node-cron
+            interval: string; // for example: "0 * * * * *" - every min. - second (optional), minute, hour, day of month, month, day of week
+            startBlockNumber?: number; // the starting block number where the first scan starts. default is the block number when the app starts
+        };
     },
     fees: {
         priorityMultipliers: { //multiplier of the reference fee (the simpliest transaction minimum fee)
@@ -22,5 +26,5 @@ export interface ILocalNodeConfig {
     };
     mongoDB: { //to save persistent account creationss
         connectionUri: string;
-    }
+    };
 }

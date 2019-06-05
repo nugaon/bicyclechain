@@ -88,7 +88,8 @@ export class TronController implements ICryptoCurrency {
             address: account.address.base58,
             additionalInfo: {
                 privateKey: account.privateKey,
-                publicKey: account.publicKey
+                publicKey: account.publicKey,
+                addressInHex: account.address.hex
             }
         };
     }

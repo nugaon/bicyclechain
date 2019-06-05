@@ -167,6 +167,7 @@ Install lib dependencies that the node packages use
 > sudo apt-get install -y python build-essential
 
 Run the application with PM2 (or with any other alternative which can build NodeJS Typescript code).
+> npm i -g pm2
 
 For PM2 you should install the typescript module with
 > pm2 install typescript ts-node

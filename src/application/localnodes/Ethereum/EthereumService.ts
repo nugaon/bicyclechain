@@ -1,6 +1,5 @@
 import { Socket } from "net";
 import { default as rp } from "request-promise-native";
-import * as util from "util";
 import { default as Web3 } from "web3";
 import { TransactionReceipt, Transaction } from "web3-core";
 import { BlockHeader } from "web3-eth";
@@ -68,6 +67,9 @@ export class EthereumService {
     public async onInit() {
         if(this.config.mongoDB) {
             await this.initExplorer();
+            if(this.config.mongoDB.removeNotUsedTransactions && this.config.mongoDB.removeNotUsedTransactions.atServerStart) {
+                this.removeNotUsedTransactionsFromDb();
+            }
         }
         if(this.config.walletChangeCallback && this.config.walletChangeCallback.enabled) {
             console.log(`[ETH] send callbacks to ${this.config.walletChangeCallback.callbackUri} with cron ${this.config.walletChangeCallback.cron.interval}`);
@@ -384,7 +386,7 @@ export class EthereumService {
         }
     }
 
-    private async removeNotUsedAccountsFromDb() {
+    private async removeNotUsedTransactionsFromDb() {
         console.log("\t[ETH] remove transactions which not belong to the accounts of the application")
         const accounts = await this.getAccounts();
         await this.storage.NormalTransaction.deleteMany({

@@ -6,12 +6,15 @@ import { ITransaction } from "../../cryptoCurrencies/ICryptoCurrency";
 import { default as TronWeb } from 'tronweb';
 import { sendedTransaction, trxTransaction, block, createdAccount, extendedTransaction } from "./ITron";
 import { TronDB, IAccount } from "./TronDB";
+import * as cron from "node-cron";
+import { AsyncForeach } from "../../generic/AsyncForeach";
 
 export class TronService {
 
     private config: Config;
     private client: TronWeb;
     private storage: TronDB;
+    private lastBlockNumberAtCallback: number; //the last emitted block number at callback
 
     constructor() {
         this.config = environment.localnodeConfigs.TRON;
@@ -24,6 +27,9 @@ export class TronService {
         this.storage = new TronDB();
         await this.storage.onInit();
         await this.checkMainAccountInDb();
+        if (this.config.walletChangeCallback && this.config.walletChangeCallback.enabled) {
+            await this.initCallback();
+        }
         console.log("[TRX] TRON network service initialized");
     }
 
@@ -35,8 +41,12 @@ export class TronService {
     }
 
     public async getBalance(account: string): Promise<string> {
-        const balanceInSun = await this.client.trx.getBalance(account)
-        return this.client.fromSun(balanceInSun);
+        try {
+            const balanceInSun = await this.client.trx.getBalance(account)
+            return this.client.fromSun(balanceInSun);
+        } catch(e) {
+            throw Boom.notFound("The account has not created yet (must sent minimum 0.1 TRX to it to create)");
+        }
     }
 
     public async listAccountTransactions(
@@ -221,5 +231,68 @@ export class TronService {
             from: senderAddress,
             to: receiverAddress
         }
+    }
+
+    private async initCallback() {
+        if(this.config.walletChangeCallback.cron.startBlockNumber) {
+            this.lastBlockNumberAtCallback = this.config.walletChangeCallback.cron.startBlockNumber;
+        } else {
+            this.lastBlockNumberAtCallback = await this.getBlockNumber();
+        }
+        cron.schedule(this.config.walletChangeCallback.cron.interval, async () => {
+            try {
+                const accounts = await this.getAccounts();
+                let loopBlock: block = await this.client.trx.getCurrentBlock();
+                let loopBlockNumber = loopBlock.block_header.raw_data.number;
+                const recentBlockNumber = loopBlockNumber; //after the transactions check this value overwrite the lastBlockNumberAtCallback value
+                while(loopBlockNumber > this.lastBlockNumberAtCallback) {
+                    console.log("loopBlockNumber", loopBlockNumber);
+
+                    //gather txids which affected the application's accounts.
+                    const ownTxIds: Array<string> = []; //txids of the transactions which affect the accounts that the application handles
+                    if(loopBlock.transactions) {
+                        loopBlock.transactions.forEach(transaction => {
+                            const transactionAddresses = this.getAddressesInTrxTransaction(transaction);
+                            accounts.forEach(account => {
+                                if(transactionAddresses.includes(account)) {
+                                    ownTxIds.push(transaction.txID);
+                                }
+                            });
+                        });
+
+                        //make callback request
+                        ownTxIds.forEach(txid => {
+                            console.log(`[TRX] transaction happened: ${txid}`);
+                            rp({
+                                method: "GET",
+                                uri: this.config.walletChangeCallback.callbackUri + "/trx/" + txid,
+                                json: true
+                            });
+                        });
+                    }
+
+                    //prepare next loop block object
+                    loopBlock = await this.client.trx.getBlockByNumber(--loopBlockNumber);
+                }
+                this.lastBlockNumberAtCallback = recentBlockNumber;
+            } catch (e) {
+                console.log("[TRX] ERROR: callback error", e);
+            }
+        });
+    }
+
+    /**
+    * Helper method to retrive addresses from a trx transaction
+    *
+    * @param  {trxTransaction} transaction native transaction object
+    * @return {Array<string>} the used addresses in the transaction
+    */
+    private getAddressesInTrxTransaction(transaction: trxTransaction): Array<string> {
+        const addresses: Array<string> = [];
+        transaction.raw_data.contract.forEach(contractData => {
+            addresses.push(this.client.address.fromHex(contractData.parameter.value.to_address));
+            addresses.push(this.client.address.fromHex(contractData.parameter.value.owner_address));
+        });
+        return addresses;
     }
 }
