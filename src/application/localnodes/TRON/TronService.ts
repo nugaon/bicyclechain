@@ -1,5 +1,5 @@
 import { environment } from "../../../environments/environment";
-import { ILocalNodeConfig as Config } from "./ILocalNodeConfig";
+import { ILocalNodeConfig as Config, ITokenConfig } from "./ILocalNodeConfig";
 import {default as rp } from "request-promise-native";
 import { default as Boom } from "boom";
 import { ITransaction } from "../../cryptoCurrencies/ICryptoCurrency";
@@ -7,6 +7,10 @@ import { default as TronWeb } from 'tronweb';
 import { sendedTransaction, trxTransaction, block, createdAccount, extendedTransaction } from "./ITron";
 import { TronDB, IAccount } from "./TronDB";
 import * as cron from "node-cron";
+import { ICryptoCurrency, ITokenRouteMapping } from "../../cryptoCurrencies/ICryptoCurrency";
+import { AsyncForeach } from "../../generic/AsyncForeach";
+import { TRC10Controller } from "./tokens/TRC10Controller";
+import { tokenCreateOptions } from "./tokens/ITRC10";
 
 export class TronService {
 
@@ -14,9 +18,14 @@ export class TronService {
     private client: TronWeb;
     private storage: TronDB;
     private lastBlockNumberAtCallback: number; //the last emitted block number at callback
+    private tokens: Array<ITokenConfig>;
 
     constructor() {
         this.config = environment.localnodeConfigs.TRON;
+
+        if(this.config.withTokens) {
+            this.tokens = this.config.withTokens;
+        }
     }
 
     public async onInit() {
@@ -68,8 +77,8 @@ export class TronService {
     public async getTransaction(txid: string): Promise<ITransaction> {
         const nativeTransaction = await this.getNativeTransaction(txid);
 
-        const senderAddress = this.client.address.fromHex(nativeTransaction.raw_data.contract[0].parameter.value.owner_address);
-        const receiverAddress = this.client.address.fromHex(nativeTransaction.raw_data.contract[0].parameter.value.to_address);
+        const senderAddress = this.getSenderOfTheTransaction(nativeTransaction);
+        const receiverAddress = this.getReceiverOfTheTransaction(nativeTransaction);
         const senderAccountInstance = await this.storage.Account.findOne({address: senderAddress});
         const receiverAccountInstance = await this.storage.Account.findOne({address: receiverAddress});
 
@@ -101,8 +110,8 @@ export class TronService {
     public async getAccountTransaction(account: string, txid: string): Promise<ITransaction> {
         const nativeTransaction = await this.getNativeTransaction(txid);
 
-        const senderAddress = this.client.address.fromHex(nativeTransaction.raw_data.contract[0].parameter.value.owner_address);
-        const receiverAddress = this.client.address.fromHex(nativeTransaction.raw_data.contract[0].parameter.value.to_address);
+        const senderAddress = this.getSenderOfTheTransaction(nativeTransaction);
+        const receiverAddress = this.getReceiverOfTheTransaction(nativeTransaction);
 
         let category: "SEND" | "RECEIVE" | "OTHER";
         if(senderAddress.toLowerCase() === account.toLowerCase() && receiverAddress.toLowerCase() === account.toLowerCase()) {
@@ -124,6 +133,20 @@ export class TronService {
         return currentBlock.block_header.raw_data.number;
     }
 
+    /**
+    * Get block by pass the sequence number of the block, or retrieve the last one
+    *
+    * @param  {number} height sender address
+    * @return {sendedTransaction} object of the sended transaction
+    */
+    public async getBlockByNumber(height: number = -1): Promise<block> {
+        if(height === -1) {
+            return this.client.trx.getCurrentBlock();
+        } else {
+            return this.client.trx.getBlockByNumber(height);
+        }
+    }
+
     public async generateAccount(): Promise<createdAccount> {
         const account: createdAccount = await this.client.createAccount();
         const accountInstance = new this.storage.Account({
@@ -136,7 +159,7 @@ export class TronService {
         return account;
     }
 
-    public isAddress(address: string) {
+    public isAddress(address: string): Promise<boolean> {
         return this.client.isAddress(address);
     }
 
@@ -169,6 +192,52 @@ export class TronService {
         return this.client.trx.sendRawTransaction(signedTx);
     }
 
+    public getSenderOfTheTransaction(nativeTransaction: extendedTransaction): string {
+        return this.client.address.fromHex(nativeTransaction.raw_data.contract[0].parameter.value.owner_address);
+    }
+
+    public getReceiverOfTheTransaction(nativeTransaction: extendedTransaction): string {
+        return this.client.address.fromHex(nativeTransaction.raw_data.contract[0].parameter.value.to_address);
+    }
+
+    /**
+    * Helper method to retrive addresses from a trx transaction
+    *
+    * @param  {trxTransaction} transaction native transaction object
+    * @return {Array<string>} the used addresses in the transaction
+    */
+    public getAddressesInTrxTransaction(transaction: trxTransaction): Array<string> {
+        const addresses: Array<string> = [];
+        transaction.raw_data.contract.forEach(contractData => {
+            addresses.push(this.client.address.fromHex(contractData.parameter.value.to_address));
+            addresses.push(this.client.address.fromHex(contractData.parameter.value.owner_address));
+        });
+        return addresses;
+    }
+
+    public async initTokens() {
+        const tokenInstances: Array<ICryptoCurrency> = [];
+        const routeMapping: Array<ITokenRouteMapping> = [];
+        if(this.tokens) {
+            await AsyncForeach(this.tokens, async (token): Promise<void> => {
+                if(token.type == "TRC10") {
+                    const tokenInstance = new TRC10Controller(this, this.storage, this.client, token.tokenID, token.route);
+                    await tokenInstance.onInit();
+                    const refereinceId = `TOKEN-TRON-TRC10-${token.route}`;
+                    routeMapping.push({
+                        route: token.route,
+                        referenceId: refereinceId
+                    });
+                    tokenInstances[refereinceId] = tokenInstance;
+                }
+            });
+        }
+        return {
+            routeMapping: routeMapping,
+            instances: tokenInstances
+        };
+    }
+
     private async getOwnedAccountPrivateKey(address: string): Promise<string> {
         const account = await this.getOwnedAccount(address);
         return account.privateKey;
@@ -184,7 +253,7 @@ export class TronService {
         if(!mainAccountInDb) {
             const mainAccountInstance = new this.storage.Account({
                 address: this.getMainAccount(),
-                addressInHex: this.client.toHex(this.getMainAccount()),
+                addressInHex: this.client.address.toHex(this.getMainAccount()),
                 privateKey: this.config.mainAccount.privateKey
             });
             await mainAccountInstance.save();
@@ -214,11 +283,11 @@ export class TronService {
 
     private async nativeTransactionToRegularTransaction(nativeTransaction: extendedTransaction, category: "SEND" | "RECEIVE" | "OTHER"): Promise <ITransaction> {
         if(!this.trxTransactionValidation(nativeTransaction)) {
-            throw Boom.illegal(`Transaction ${nativeTransaction.txID} not a valid TRX transaction`);
+            throw Boom.badData(`Transaction ${nativeTransaction.txID} not a valid TRX transaction`);
         }
         const valueInTrx = this.client.fromSun(nativeTransaction.raw_data.contract[0].parameter.value.amount);
-        const senderAddress = this.client.address.fromHex(nativeTransaction.raw_data.contract[0].parameter.value.owner_address);
-        const receiverAddress = this.client.address.fromHex(nativeTransaction.raw_data.contract[0].parameter.value.to_address);
+        const senderAddress = this.getSenderOfTheTransaction(nativeTransaction);
+        const receiverAddress = this.getReceiverOfTheTransaction(nativeTransaction);
         const currentBlockNumber = await this.getBlockNumber();
         const txBlockNumber = nativeTransaction.blockNumber;
 
@@ -232,6 +301,21 @@ export class TronService {
         }
     }
 
+    public async tokenIssue(options: tokenCreateOptions) {
+        console.log(`[TRX] token issue:`);
+        options.saleStart = options.saleStart ? new Date(options.saleStart).getTime() : Date.now();
+        options.saleEnd = options.saleEnd ? new Date(options.saleEnd).getTime() : null,
+        options.freeBandwidth = options.freeBandwidth ? options.freeBandwidth : 0;
+        options.freeBandwidthLimit = options.freeBandwidthLimit ? options.freeBandwidthLimit : 0;
+        options.frozenAmount = options.frozenAmount ? options.frozenAmount : null;
+        options.frozenDuration = options.frozenDuration ? options.frozenDuration : null;
+
+        const unsignedTx = await this.client.transactionBuilder.createToken(options, this.getMainAccount());
+        const signedTx = await this.client.trx.sign(unsignedTx, this.config.mainAccount.privateKey);
+        console.log(`token creation`, signedTx);
+        return this.client.trx.sendRawTransaction(signedTx);
+    }
+
     private async initCallback() {
         if(this.config.walletChangeCallback.cron.startBlockNumber) {
             this.lastBlockNumberAtCallback = this.config.walletChangeCallback.cron.startBlockNumber;
@@ -241,7 +325,7 @@ export class TronService {
         cron.schedule(this.config.walletChangeCallback.cron.interval, async () => {
             try {
                 const accounts = await this.getAccounts();
-                let loopBlock: block = await this.client.trx.getCurrentBlock();
+                let loopBlock: block = await this.getBlockByNumber();
                 let loopBlockNumber = loopBlock.block_header.raw_data.number;
                 const recentBlockNumber = loopBlockNumber; //after the transactions check this value overwrite the lastBlockNumberAtCallback value
                 while(loopBlockNumber > this.lastBlockNumberAtCallback) {
@@ -269,27 +353,12 @@ export class TronService {
                     }
 
                     //prepare next loop block object
-                    loopBlock = await this.client.trx.getBlockByNumber(--loopBlockNumber);
+                    loopBlock = await this.getBlockByNumber(--loopBlockNumber);
                 }
                 this.lastBlockNumberAtCallback = recentBlockNumber;
             } catch (e) {
                 console.log("[TRX] ERROR: callback error", e);
             }
         });
-    }
-
-    /**
-    * Helper method to retrive addresses from a trx transaction
-    *
-    * @param  {trxTransaction} transaction native transaction object
-    * @return {Array<string>} the used addresses in the transaction
-    */
-    private getAddressesInTrxTransaction(transaction: trxTransaction): Array<string> {
-        const addresses: Array<string> = [];
-        transaction.raw_data.contract.forEach(contractData => {
-            addresses.push(this.client.address.fromHex(contractData.parameter.value.to_address));
-            addresses.push(this.client.address.fromHex(contractData.parameter.value.owner_address));
-        });
-        return addresses;
     }
 }

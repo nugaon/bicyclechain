@@ -2,9 +2,11 @@ import { IAddressCheck, ICryptoCurrency, ITokenTransporter, ITransaction } from 
 import { DbNormalTransactionsToRegularTransactions, INormalTransaction } from "./EthereumDB";
 import { EthereumService } from "./EthereumService";
 import { etherscanTransactionsToRegularTransactions, IEtherscanTransaction } from "./EtherscanResponses";
+import { UniqueRoutes } from "./uniqueEndpoints/UniqueRoutes";
+import { IUniqueEndpoints } from "../../generic/IUniqueEndpoints";
 import { default as Boom } from "boom";
 
-export class EthereumController implements ICryptoCurrency, ITokenTransporter {
+export class EthereumController implements ICryptoCurrency, ITokenTransporter, IUniqueEndpoints {
 
     private service: EthereumService;
 
@@ -100,8 +102,10 @@ export class EthereumController implements ICryptoCurrency, ITokenTransporter {
         const sender = req.payload.sendFrom;
         const amountInEther = req.payload.amount + "";
         const password = req.payload.additionalParams && req.payload.additionalParams.password ? req.payload.additionalParams.password : null;
+        const gas = req.payload.additionalParams && req.payload.additionalParams.gas ? req.payload.additionalParams.gas : null;
         const options = {
-            priority: req.payload.priority
+            priority: req.payload.priority,
+            gas: gas
         };
 
         //we always send coin from the main wallet
@@ -139,5 +143,30 @@ export class EthereumController implements ICryptoCurrency, ITokenTransporter {
 
     public initTokens() {
         return this.service.initTokens();
+    }
+
+    public getUniqueRouteInstance() {
+        return new UniqueRoutes(this);
+    }
+
+    public async callContractMethod(req: any) {
+        const methodName = req.payload.methodName;
+        const methodType = req.payload.methodType;
+        const contractAddress = req.payload.contractAddress;
+        const contractAbi = req.payload.contractAbi;
+        const options = req.payload.additionalParams;
+        return this.service.callContractMethod(methodName, methodType, contractAddress, contractAbi, options);
+    }
+
+    public async deployContract(req: any) {
+        const abi = req.payload.abi;
+        const bytecode = req.payload.bytecode;
+        const options = req.payload.additionalParams;
+        try {
+            const txid = await this.service.deployContract(abi, bytecode, options);
+            return { txid: txid };
+        } catch(e) {
+            throw Boom.notAcceptable(e);
+        }
     }
 }

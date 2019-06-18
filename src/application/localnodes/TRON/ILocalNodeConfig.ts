@@ -27,4 +27,11 @@ export interface ILocalNodeConfig {
     mongoDB: { //to save persistent account creationss
         connectionUri: string;
     };
+    withTokens?: Array<ITokenConfig>;
+}
+
+export interface ITokenConfig {
+    type: "TRC10"; // only the TRC10 supported yet.
+    tokenID?: string; //only at TRC10
+    route: string; //the route of the cryptoCurrency
 }

@@ -13,7 +13,7 @@ export class CryptoCurrencyValidator {
         environment.localnodes.forEach((localnode) => {
             this.availableCurrencyRoutes.push(localnode.route);
         });
-        if (environment.localnodeConfigs.Ethereum) {
+        if (environment.localnodeConfigs.Ethereum && environment.localnodeConfigs.Ethereum.withContracts) {
             environment.localnodeConfigs.Ethereum.withContracts.forEach((token) => {
                 this.availableCurrencyRoutes.push(token.route);
             });

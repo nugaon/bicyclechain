@@ -37,6 +37,9 @@ export interface ILocalNodeConfig {
         MEDIUM: string;
         HIGH: string;
     }
+    ownRoute?: {//init own routes for ethereum
+        enabled: boolean;
+    }
 }
 
 export interface IEtherscanConfig {

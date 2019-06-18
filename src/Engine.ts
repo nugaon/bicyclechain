@@ -20,6 +20,8 @@ export class Engine {
 
     private usableLocalNodeControllers: ICryptoCurrency[]; //contains the initialized objects of local node's API services
 
+    private uniqueRouteClasses: Array<any>; //contains unique routes for used local node services if has any.
+
     public async bootstrapApplication(withServer: boolean): Promise<void> {
         console.log("[Engine] Initializing application engine...");
         try {
@@ -68,6 +70,17 @@ export class Engine {
                     this.usableLocalNodeControllers[tokenRoute.referenceId] = tokenInstance;
                 });
             }
+            //init unique routes if the technology has
+            this.uniqueRouteClasses = [];
+            for(const controller in this.usableLocalNodeControllers) {
+                const castedController: any = this.usableLocalNodeControllers[controller];
+                if(castedController.getUniqueRouteInstance !== undefined) {
+                    const uniqueRouteInstance = castedController.getUniqueRouteInstance();
+                    if(uniqueRouteInstance) {
+                        this.uniqueRouteClasses.push(uniqueRouteInstance);
+                    }
+                }
+            }
         });
 
         this.container.bind<ICryptoCurrency[]>("cryptoCurrencies").toConstantValue(this.usableLocalNodeControllers);
@@ -85,7 +98,7 @@ export class Engine {
     }
 
     private async startServer(): Promise<void> {
-        await this.container.get<Server>(Server).init();
+        await this.container.get<Server>(Server).init(this.uniqueRouteClasses);
     }
 
     public getContainer(): Container {

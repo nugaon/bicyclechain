@@ -1,8 +1,10 @@
-import { IAddressCheck, ICryptoCurrency, ITransaction } from "../../cryptoCurrencies/ICryptoCurrency";
+import { ICryptoCurrency, ITransaction, ITokenTransporter } from "../../cryptoCurrencies/ICryptoCurrency";
 import { TronService } from "./TronService";
 import { default as Boom } from "boom";
+import { IUniqueEndpoints } from "../../generic/IUniqueEndpoints";
+import { UniqueRoutes } from "./uniqueEndpoints/UniqueRoutes";
 
-export class TronController implements ICryptoCurrency {
+export class TronController implements ICryptoCurrency, ITokenTransporter, IUniqueEndpoints {
 
     private service: TronService;
 
@@ -48,7 +50,7 @@ export class TronController implements ICryptoCurrency {
         const offset = (req.payload && req.payload.offset) ? req.payload.offset : 100;
         const page = (req.payload && req.payload.page) ? req.payload.page : 1;
         let standardizedTransactions: Array<ITransaction> = [];
-        const transactions = this.service.listAccountTransactions(account, {offset: offset, page: page});
+        const transactions = await this.service.listAccountTransactions(account, {offset: offset, page: page});
         // const currentBlockNumber = await this.service.getBlockNumber(); //to calculate confirmations
 
         return standardizedTransactions;
@@ -95,12 +97,28 @@ export class TronController implements ICryptoCurrency {
     }
 
     public async isAddress(req: any) {
-        return this.service.isAddress(req.params.address);
+        const valid: boolean = await this.service.isAddress(req.params.address);
+        return {
+            valid: valid,
+            address: req.params.address
+        }
     }
 
     public async getGlobalBalance() {
         const account = this.service.getMainAccount();
         const balance = await this.service.getBalance(account);
         return {account: account, balance: balance};
+    }
+
+    public initTokens() {
+        return this.service.initTokens();
+    }
+
+    public getUniqueRouteInstance() {
+        return new UniqueRoutes(this);
+    }
+
+    public async createTRC10Token(req: any) {
+        this.service.tokenIssue(req.payload);
     }
 }

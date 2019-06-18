@@ -103,6 +103,11 @@ For example if the transaction's 'to' value equals to one of your accounts', the
 
 Get native transaction details from the blockchain
 
+> post /api/v1/cryptocurrency/{cryptocurrency}/account
+
+Create account in the blockchain.
+For bitcoin and its forks should pass * "additionalParams": { "account": "accountName" } * payload for the account generation.
+
 > post /api/v1/cryptocurrency/{cryptocurrency}/withdraw
 
 Make transaction from the main account or a specified account to the given address. You maybe should pass password or any other options if you specify sendFrom address (for example at Ethereum).
@@ -166,6 +171,13 @@ The blockchain nodes configuration can differ from one another. You can find the
 Install lib dependencies that the node packages use
 > sudo apt-get install -y python build-essential
 
+Install Nodejs (version 10 is supported), suggested install with [NVM](https://github.com/nvm-sh/nvm)
+> curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash
+
+> source ~/.bashrc
+
+> nvm i 10
+
 Run the application with PM2 (or with any other alternative which can build NodeJS Typescript code).
 > npm i -g pm2
 
@@ -177,6 +189,16 @@ Install node packages
 
 Set your own environment configuration file (in src/environments/environment.ts), then you can start the BicycleChain with PM2
 > pm2 start src/init.ts --name BicycleChain
+
+# Notes for Local Nodes
+To running this API with full functionalities for some local nodes MongoDB needed to have. You can run a simple MongoDB instance with Docker
+> docker run -d -v bicycle-data:/data/db --name bicyclechain-mongo -p 127.0.0.1:27017:27017 mongo
+
+Call its CLI with
+> docker exec -ti bicyclechain-mongo mongo
+
+## TRON
+For TRON network you have to set up an MongoDB database in the interest of account handling (the application save the generated accounts into the database).
 
 # Contribution
 On a separated branch you can make pull request for your cryptocurrency integration.

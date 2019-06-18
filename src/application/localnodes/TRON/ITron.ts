@@ -66,3 +66,23 @@ export interface createdAccount {
         hex: string;
     }
 }
+
+export interface accountData {
+    account_name: string;
+    type: 'Contract';
+    address: string;
+    balance: number; //trx balance
+    asset: Array<{
+        key: string;
+        value: number;
+    }>;
+    account_resource: {},
+    assetV2: Array<{
+        key: string;
+        value: number;
+    }>;
+    free_asset_net_usageV2: Array<{
+        key: string;
+        value: number;
+    }>;
+}

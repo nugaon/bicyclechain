@@ -3,7 +3,8 @@ import { default as rp } from "request-promise-native";
 import { default as Web3 } from "web3";
 import { TransactionReceipt, Transaction } from "web3-core";
 import { BlockHeader } from "web3-eth";
-import { Unit } from "web3-utils";
+import { Unit, AbiItem } from "web3-utils";
+import { SendOptions } from "web3-eth-contract";
 import { environment } from "../../../environments/environment";
 import { ICryptoCurrency, ITokenRouteMapping } from "../../cryptoCurrencies/ICryptoCurrency";
 import { AsyncForeach } from "../../generic/AsyncForeach";
@@ -436,6 +437,109 @@ export class EthereumService {
             to: nativeTransaction.to,
             from: nativeTransaction.from
         }
+    }
+
+    public async callContractMethod(
+        methodName: string,
+        methodType: "call" | "send",
+        contractAddress: string,
+        contractAbi: AbiItem[],
+        options?: {
+            functionParams?: Array<any>,
+            callFrom?: string,
+            callFromPassword?: string,//necessary at sendFrom
+            gas?: number,
+            gasPrice?: string
+        }
+        ) {
+        const contractInstance = this.getContractInstance(contractAddress, contractAbi);
+        // if(!methodName.includes("(")) {
+        //     methodName = methodName + "()";
+        // }
+        const transactionOptions = await this.getContractSendOptionsWithUnlock(options);
+
+        if(options && options.functionParams) {
+            if(methodType === "call") {
+                return contractInstance.methods[methodName](... options.functionParams).call(transactionOptions);
+            } else {
+                return new Promise(resolve => {
+                    contractInstance.methods[methodName](... options.functionParams).send(transactionOptions)
+                    .once('transactionHash', function(hash: string){
+                        resolve(hash);
+                    });
+                });
+            }
+        }
+
+        if(methodType === "call") {
+            return contractInstance.methods[methodName]().call(transactionOptions);
+        } else {
+            return new Promise(resolve => {
+                contractInstance.methods[methodName]().send(transactionOptions)
+                .once('transactionHash', function(hash: string){
+                    resolve(hash);
+                });
+            });
+        }
+    }
+
+    public async deployContract(
+        abi:  AbiItem[],
+        bytecode: string,
+        options?: {
+            constructorParams?: Array<any>,
+            callFrom?: string,
+            callFromPassword?: string,//necessary at sendFrom
+            gas?: number,
+            gasPrice?: string
+        }
+    ): Promise<string> {
+        const tokenContract = new this.web3.eth.Contract(abi);
+        if(bytecode.substring(0, 2).toLowerCase() !== "0x") {
+            bytecode = "0x" + bytecode
+        }
+
+        const transactionOptions = await this.getContractSendOptionsWithUnlock(options);
+
+        return new Promise((resolve, reject) => {
+            tokenContract.deploy({
+                data: bytecode,
+                arguments: options && options.constructorParams ? options.constructorParams : null
+            })
+            .send(transactionOptions, (error, transactionHash) => {
+                if(error) {
+                    reject(error)
+                }
+                console.log("contract deployed", transactionHash);
+                resolve(transactionHash);
+            })
+        })
+    }
+
+    private async getContractSendOptionsWithUnlock(options: {
+        params?: Array<string | number>,
+        callFrom?: string,
+        callFromPassword?: string,//necessary at sendFrom
+        gas?: number,
+        gasPrice?: string
+    }): Promise<SendOptions> {
+        const password = options && options.callFromPassword ? options.callFromPassword : null;
+        const transactionOptions: SendOptions = {
+            from: options && options.callFrom ? options.callFrom : this.getMainAccount(),
+            gas: options && options.gas ? options.gas : this.web3.defaultGas,
+            gasPrice: options && options.gasPrice ? options.gasPrice : this.web3.defaultGasPrice
+        }
+
+        if(!password && password !== this.getMainAccount()) {
+            throw Boom.badRequest("If options.sendFrom passed, options.sendFromPassword necessary also");
+        }
+        console.log("transactonOptions", transactionOptions);
+        if(transactionOptions.from === this.getMainAccount()) {
+            await this.unlockMainAccount();
+        } else {
+            await this.unlockAccount(transactionOptions.from, password);
+        }
+        return transactionOptions;
     }
 
     private async initExplorer() {

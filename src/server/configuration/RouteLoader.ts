@@ -14,7 +14,11 @@ export class RouteLoader {
         return RouteRegistry.getRoutes()
             .map((r: Routes) => (this.ctx.get(<any>r)))
             .map((r: Routes) => r.routes);
+    }
 
+    public loadExtraRouteClasses(routeClasses: Array<any>): ServerRoute[][] {
+        return routeClasses
+            .map((r: Routes) => r.routes);
     }
 
 }

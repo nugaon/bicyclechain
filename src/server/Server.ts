@@ -20,7 +20,7 @@ export class Server implements OnDestroy {
         ErrorConfiguration();
     }
 
-    public async init(): Promise<void> {
+    public async init(additionalRouteClasses?: Array<any>): Promise<void> {
         this.logger.info("=======[SERVER START]=======");
         this.logger.info(`Initializing BicycleChain server on ${environment.host}:${environment.port}`);
 
@@ -28,7 +28,11 @@ export class Server implements OnDestroy {
 
         await this.httpServer.register(this.getPluginConfiguration());
 
-        const routes: Hapi.ServerRoute[][] = this.routeLoader.loadModules();
+        let routes: Hapi.ServerRoute[][] = this.routeLoader.loadModules();
+
+        if(additionalRouteClasses && additionalRouteClasses.length > 0) {
+            routes = routes.concat(this.routeLoader.loadExtraRouteClasses(additionalRouteClasses));
+        }
 
         this.httpServer.route([].concat.apply([], routes));
         this.start();
