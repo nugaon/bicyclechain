@@ -225,7 +225,13 @@ export class EthereumService {
     }
 
     public async unlockAccount(account: string, password: string, duration = null) {
-        return this.web3.eth.personal.unlockAccount(account, password, duration ? duration : 600);
+        try {
+            const response = await this.web3.eth.personal.unlockAccount(account, password, duration ? duration : 600);
+            return response;
+        }
+        catch(e) {
+            throw Boom.unauthorized(e);
+        }
     }
 
     public async listAccountTransactionsFromDb(account: string, page: number = 1, offset: number = 100): Promise<Array<INormalTransaction>> {
@@ -460,12 +466,20 @@ export class EthereumService {
 
         if(options && options.functionParams) {
             if(methodType === "call") {
-                return contractInstance.methods[methodName](... options.functionParams).call(transactionOptions);
+                try {
+                    const answer = await contractInstance.methods[methodName](... options.functionParams).call(transactionOptions);
+                    return answer;
+                } catch(e) {
+                    throw Boom.badRequest(e);
+                }
             } else {
-                return new Promise(resolve => {
-                    contractInstance.methods[methodName](... options.functionParams).send(transactionOptions)
-                    .once('transactionHash', function(hash: string){
-                        resolve(hash);
+                return new Promise((resolve, reject) => {
+                    contractInstance.methods[methodName](... options.functionParams).send(transactionOptions, (error, transactionHash) => {
+                        if(error) {
+                            throw Boom.badRequest(error);
+                        }
+                        console.log("contract deployed", transactionHash);
+                        resolve(transactionHash);
                     });
                 });
             }

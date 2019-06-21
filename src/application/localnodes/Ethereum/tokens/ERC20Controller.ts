@@ -98,7 +98,7 @@ export class ERC20Controller implements ICryptoCurrency {
         const receiver = req.payload.sendTo;
         const sender = req.payload.sendFrom;
         const amountToken = req.payload.amount + "";
-        const password = req.payload.password;
+        const password = req.payload.additionalParams.password;
         const options = {
             priority: req.payload.priority
         }
