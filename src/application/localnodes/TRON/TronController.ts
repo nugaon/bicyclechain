@@ -119,6 +119,22 @@ export class TronController implements ICryptoCurrency, ITokenTransporter, IUniq
     }
 
     public async createTRC10Token(req: any) {
-        this.service.tokenIssue(req.payload);
+        let tokenIssueParams = req.payload;
+        const additionalParams = req.payload.additionalParams;
+        delete tokenIssueParams["additionalParams"];
+        return this.service.tokenIssue(tokenIssueParams, additionalParams);
+    }
+
+    public async freezeBalance(req: any) {
+        const amountInTrx = req.payload.amount;
+        const duration = req.payload.duration;
+        const resource = req.payload.resource;
+        const ownerAddress = req.payload.ownerAddress ? req.payload.ownerAddress : this.service.getMainAccount();
+        const receiverAddress = req.payload.receiverAddress ? req.payload.receiverAddress : ownerAddress;
+        let options: any = {};
+        if(req.payload.additionalParams && req.payload.additionalParams.callFromPrivateKey) {
+            options.callFromPrivateKey = req.payload.additionalParams.callFromPrivateKey;
+        }
+        return this.service.freezeBalance(amountInTrx, duration, resource, ownerAddress, receiverAddress, options);
     }
 }

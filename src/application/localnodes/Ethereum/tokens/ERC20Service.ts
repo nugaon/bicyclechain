@@ -133,7 +133,7 @@ export class ERC20Service {
             throw Boom.notFound(`The transaction ${txid} not found in the db`);
         }
         if(dbTransaction.address !== this.contractAddress) {
-            throw Boom.notFound(`The transaction not belongs to ${this.tokenSymbol} token`);
+            throw Boom.notAcceptable(`The transaction not belongs to ${this.tokenSymbol} token`);
         }
         //rewrite the 'to' attribute, because it's always the contract address, and recheck accounts to define category
         nativeTransaction.to = dbTransaction.to;
@@ -239,7 +239,7 @@ export class ERC20Service {
         try{
             return new Promise((resolve) => {
                 const priority = options && options.priority ? options.priority : "MEDIUM";
-                this.contractInstance.methods.transfer(toAddress, this.transformToBasicUnit(amount)).send(this.transactonOptions(fromAddress, this.getGasPrice(priority)))
+                this.contractInstance.methods.transfer(toAddress, this.transformToBasicUnit(amount)).send(this.transactionOptions(fromAddress, this.getGasPrice(priority)))
                 .once('transactionHash', function(hash: string){
                     resolve(hash);
                     // it has error but https://github.com/ethereum/web3.js/issues/2542 they're working on it now.
@@ -280,10 +280,10 @@ export class ERC20Service {
     }
 
     private mainAccountTransaction() {
-        return this.transactonOptions(this.ethereumService.getMainAccount());
+        return this.transactionOptions(this.ethereumService.getMainAccount());
     }
 
-    private transactonOptions(from: string, gasPrice: string = null) {
+    private transactionOptions(from: string, gasPrice: string = null) {
         return {
             from: from,
             gas: this.defaultGas,

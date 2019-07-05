@@ -1,4 +1,4 @@
-export interface trxTransaction {
+export interface trxTransaction { //comes with block request
     ret?: Array<{ contractRet: string; }>; //success
     txID: string;
     raw_data: transactionRawData;
@@ -22,14 +22,15 @@ export interface transactionRawData {
     contract: Array<{
         parameter:{
             value: {
-                amount: number;
+                amount?: number; //token transaction and trx transaction
                 owner_address: string;
                 to_address: string;
                 asset_name?: string; //only if token transaction
+                contract_address?: string; //at TriggerSmartContract
             },
             type_url: string;
         },
-        type: string; //TransferContract at trx transaction
+        type: string; //TransferContract at trx transaction, TriggerSmartContract at smart contract transaction
     }>;
     ref_block_bytes: string;
     ref_block_hash: string;

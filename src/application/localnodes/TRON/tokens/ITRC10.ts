@@ -10,6 +10,7 @@ export interface TRC10Token {
     description: string;
     url: string;
     id: string;
+    precision?: number;
 }
 
 export interface tokenCreateOptions {
@@ -26,4 +27,5 @@ export interface tokenCreateOptions {
     freeBandwidthLimit: number; // Out of totalFreeBandwidth; the amount each token holder get
     frozenAmount: number;
     frozenDuration: number; //days to freeze
+    precision?: number;
 }

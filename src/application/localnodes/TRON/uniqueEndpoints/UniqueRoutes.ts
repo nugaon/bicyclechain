@@ -28,6 +28,19 @@ export class UniqueRoutes implements Routes {
                 }
             }
         })
+
+        this.routes.push({
+            method: "POST",
+            path: "/api/v1/trx/freezeBalance",
+            options: {
+                description: "Allows users to freeze their TRX balance to grant ENERGY or BANDWIDTH to either themselves or other addresses",
+                tags: ["api", "v1", "trx"],
+                validate: this.validator.freezeBalance(),
+                handler: async (request: any) => {
+                    return this.controller.freezeBalance(request);
+                }
+            }
+        })
     }
 
     public readonly routes: ServerRoute[] = [];

@@ -26,12 +26,14 @@ export interface ILocalNodeConfig {
     };
     mongoDB: { //to save persistent account creationss
         connectionUri: string;
+        saveGeneratedUsers?: boolean;
     };
     withTokens?: Array<ITokenConfig>;
 }
 
 export interface ITokenConfig {
-    type: "TRC10"; // only the TRC10 supported yet.
+    type: "TRC10" | "TRC20";
     tokenID?: string; //only at TRC10
+    contractAddress?: string; //only at TRC20
     route: string; //the route of the cryptoCurrency
 }

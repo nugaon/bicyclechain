@@ -5,12 +5,14 @@ import { default as Boom } from "boom";
 import { ITransaction } from "../../cryptoCurrencies/ICryptoCurrency";
 import { default as TronWeb } from 'tronweb';
 import { sendedTransaction, trxTransaction, block, createdAccount, extendedTransaction } from "./ITron";
-import { TronDB, IAccount } from "./TronDB";
+import { TronDB, IAccount, TRC10Transfer, CommonTransaction } from "./TronDB";
 import * as cron from "node-cron";
 import { ICryptoCurrency, ITokenRouteMapping } from "../../cryptoCurrencies/ICryptoCurrency";
 import { AsyncForeach } from "../../generic/AsyncForeach";
+import { TRC20Controller } from "./tokens/TRC20Controller";
 import { TRC10Controller } from "./tokens/TRC10Controller";
 import { tokenCreateOptions } from "./tokens/ITRC10";
+import { BigNumber } from "bignumber.js";
 
 export class TronService {
 
@@ -19,6 +21,9 @@ export class TronService {
     private storage: TronDB;
     private lastBlockNumberAtCallback: number; //the last emitted block number at callback
     private tokens: Array<ITokenConfig>;
+    private saveGeneratedUsersIntoDb: boolean;
+    private _callbackEnabled: boolean;
+    private _observerNeededToEnvoke: boolean;
 
     constructor() {
         this.config = environment.localnodeConfigs.TRON;
@@ -26,18 +31,40 @@ export class TronService {
         if(this.config.withTokens) {
             this.tokens = this.config.withTokens;
         }
+        this.saveGeneratedUsersIntoDb = this.config.mongoDB && this.config.mongoDB.saveGeneratedUsers ? true : false;
+    }
+
+    get callbackEnabled(): boolean {
+        return this._callbackEnabled;
+    }
+
+    get observerNeededToEnvoke(): boolean {
+        return this._observerNeededToEnvoke;
     }
 
     public async onInit() {
         //TODO
         //console.log(TronWeb);
         this.client = new TronWeb(this.config.clientConfig);
-        this.storage = new TronDB();
-        await this.storage.onInit();
-        await this.checkMainAccountInDb();
-        if (this.config.walletChangeCallback && this.config.walletChangeCallback.enabled) {
-            await this.initCallback();
+        this.setDefaultPrivateKey();
+
+        if(this.config.mongoDB) {
+            this.storage = new TronDB();
+            await this.storage.onInit();
+            await this.checkMainAccountInDb();
         }
+
+        if (this.config.walletChangeCallback && this.config.walletChangeCallback.enabled) {
+            console.log(`[TRX] send callbacks to ${this.config.walletChangeCallback.callbackUri} with cron ${this.config.walletChangeCallback.cron.interval}`);
+            this._callbackEnabled = true;
+        } else {
+            this._callbackEnabled = false;
+        }
+        if(this._callbackEnabled && this.hasOwnExplorer()) {
+            await this.transactionsObserver();
+            this._observerNeededToEnvoke = true;
+        }
+
         console.log("[TRX] TRON network service initialized");
     }
 
@@ -149,13 +176,15 @@ export class TronService {
 
     public async generateAccount(): Promise<createdAccount> {
         const account: createdAccount = await this.client.createAccount();
-        const accountInstance = new this.storage.Account({
-            address: account.address.base58,
-            addressInHex: account.address.hex,
-            privateKey: account.privateKey,
-            publicKey: account.publicKey
-        });
-        await accountInstance.save();
+        if(this.saveGeneratedUsersIntoDb) {
+            const accountInstance = new this.storage.Account({
+                address: account.address.base58,
+                addressInHex: account.address.hex,
+                privateKey: account.privateKey,
+                publicKey: account.publicKey
+            });
+            await accountInstance.save();
+        }
         return account;
     }
 
@@ -220,10 +249,19 @@ export class TronService {
         const routeMapping: Array<ITokenRouteMapping> = [];
         if(this.tokens) {
             await AsyncForeach(this.tokens, async (token): Promise<void> => {
-                if(token.type == "TRC10") {
+                if(token.type === "TRC10") {
                     const tokenInstance = new TRC10Controller(this, this.storage, this.client, token.tokenID, token.route);
                     await tokenInstance.onInit();
                     const refereinceId = `TOKEN-TRON-TRC10-${token.route}`;
+                    routeMapping.push({
+                        route: token.route,
+                        referenceId: refereinceId
+                    });
+                    tokenInstances[refereinceId] = tokenInstance;
+                } else if (token.type === "TRC20") {
+                    const tokenInstance = new TRC20Controller(this, this.storage, this.client, token.contractAddress, token.route);
+                    await tokenInstance.onInit();
+                    const refereinceId = `TOKEN-TRON-TRC20-${token.route}`;
                     routeMapping.push({
                         route: token.route,
                         referenceId: refereinceId
@@ -236,6 +274,66 @@ export class TronService {
             routeMapping: routeMapping,
             instances: tokenInstances
         };
+    }
+
+    public setPrivateKey(newPrivateKey: string) {
+        this.client.setPrivateKey(newPrivateKey);
+    }
+
+    public hasOwnExplorer() {
+        return !!this.config.mongoDB;
+    }
+
+    public async tokenIssue(
+        tokenIssueParams: tokenCreateOptions,
+        additionalParams? : {
+            callFromPrivateKey?: string
+        }
+    ) {
+        tokenIssueParams.saleStart = tokenIssueParams.saleStart ? tokenIssueParams.saleStart : Date.now() + 10000;
+        tokenIssueParams.saleEnd = tokenIssueParams.saleEnd ? tokenIssueParams.saleEnd : tokenIssueParams.saleStart + 60000;
+        if(tokenIssueParams.precision) {
+            tokenIssueParams.totalSupply = new BigNumber(tokenIssueParams.totalSupply).multipliedBy(new BigNumber(10).pow(tokenIssueParams.precision)).integerValue().toNumber();
+        }
+        console.log(`[TRX] token issue:`, tokenIssueParams);
+
+        try {
+            const privateKey = additionalParams && additionalParams.callFromPrivateKey ? additionalParams.callFromPrivateKey : this.config.mainAccount.privateKey;
+            const unsignedTx = await this.client.transactionBuilder.createToken({... tokenIssueParams}, this.client.address.fromPrivateKey(privateKey));
+            const signedTx = await this.client.trx.sign(unsignedTx, privateKey);
+            console.log(`token creation`, signedTx);
+            return this.client.trx.sendRawTransaction(signedTx);
+        } catch(e) {
+            throw Boom.notAcceptable(e);
+        }
+    }
+
+    public async freezeBalance(
+        amountInTrx: number,
+        duration: number,
+        resource:  "BANDWIDTH" | "ENERGY",
+        ownerAddress: string,
+        receiverAddress: string,
+        permissionId: number,
+        options?: {
+            callFromPrivateKey?: string
+        }) {
+        try {
+            const accountPrivateKey = options && options.callFromPrivateKey ? options.callFromPrivateKey : await this.getOwnedAccountPrivateKey(ownerAddress);
+            this.setPrivateKey(accountPrivateKey);
+            const unsignedTx = this.client.transactionBuilder.freezeBalance(
+                this.client.toSun(amountInTrx), duration, resource, this.client.address.toHex(ownerAddress), this.client.address.toHex(receiverAddress), permissionId);
+            const signedTx = await this.client.trx.sign(unsignedTx, accountPrivateKey);
+            const txId = await this.client.trx.sendRawTransaction(signedTx);
+            this.setDefaultPrivateKey();
+            return txId;
+        } catch(e) {
+            throw Boom.notAcceptable(e);
+        }
+    }
+
+    public setDefaultPrivateKey() {
+        this.client.setPrivateKey(this.config.mainAccount.privateKey);
     }
 
     private async getOwnedAccountPrivateKey(address: string): Promise<string> {
@@ -301,22 +399,7 @@ export class TronService {
         }
     }
 
-    public async tokenIssue(options: tokenCreateOptions) {
-        console.log(`[TRX] token issue:`);
-        options.saleStart = options.saleStart ? new Date(options.saleStart).getTime() : Date.now();
-        options.saleEnd = options.saleEnd ? new Date(options.saleEnd).getTime() : null,
-        options.freeBandwidth = options.freeBandwidth ? options.freeBandwidth : 0;
-        options.freeBandwidthLimit = options.freeBandwidthLimit ? options.freeBandwidthLimit : 0;
-        options.frozenAmount = options.frozenAmount ? options.frozenAmount : null;
-        options.frozenDuration = options.frozenDuration ? options.frozenDuration : null;
-
-        const unsignedTx = await this.client.transactionBuilder.createToken(options, this.getMainAccount());
-        const signedTx = await this.client.trx.sign(unsignedTx, this.config.mainAccount.privateKey);
-        console.log(`token creation`, signedTx);
-        return this.client.trx.sendRawTransaction(signedTx);
-    }
-
-    private async initCallback() {
+    private async transactionsObserver() {
         if(this.config.walletChangeCallback.cron.startBlockNumber) {
             this.lastBlockNumberAtCallback = this.config.walletChangeCallback.cron.startBlockNumber;
         } else {
@@ -330,26 +413,55 @@ export class TronService {
                 const recentBlockNumber = loopBlockNumber; //after the transactions check this value overwrite the lastBlockNumberAtCallback value
                 while(loopBlockNumber > this.lastBlockNumberAtCallback) {
                     //gather txids which affected the application's accounts.
-                    const ownTxIds: Array<string> = []; //txids of the transactions which affect the accounts that the application handles
+                    const ownCommonTransactions: Array<trxTransaction> = []; //tthe transactions which affected the accounts that the application handles and belongs to normal trx transactions
+                    const ownTRC10Transactions: Array<trxTransaction> = []; //tthe transactions which affected the accounts that the application handles and belongs to normal TRC10 transactions
+
                     if(loopBlock.transactions) {
                         loopBlock.transactions.forEach(transaction => {
                             const transactionAddresses = this.getAddressesInTrxTransaction(transaction);
                             accounts.forEach(account => {
                                 if(transactionAddresses.includes(account)) {
-                                    ownTxIds.push(transaction.txID);
+                                    if (this.trxTransactionValidation(transaction)) {
+                                        console.log("HE3!")
+                                        ownCommonTransactions.push(transaction);
+                                    } else { //it must be trc10 transaction
+                                        //TODO
+                                    }
                                 }
                             });
                         });
 
-                        //make callback request
-                        ownTxIds.forEach(txid => {
-                            console.log(`[TRX] transaction happened: ${txid}`);
-                            rp({
-                                method: "GET",
-                                uri: this.config.walletChangeCallback.callbackUri + "/trx/" + txid,
-                                json: true
+                        //save into the db
+                        if(this.hasOwnExplorer()) {
+                            console.log("HE!")
+                            //trx transactions
+                            const dbTransactions: Array<CommonTransaction> = [];
+                            ownCommonTransactions.forEach(transaction => {
+
+                                dbTransactions.push({
+                                    contractRet: transaction.ret[0].contractRet,
+                                    transactionHash: transaction.txID,
+                                    value: transaction.raw_data.contract[0].parameter.value.amount + "",
+                                    from: transaction.raw_data.contract[0].parameter.value.owner_address,
+                                    to: transaction.raw_data.contract[0].parameter.value.to_address,
+                                    refBlockHash: transaction.raw_data.ref_block_hash,
+                                    timestamp: transaction.raw_data.timestamp,
+                                });
                             });
-                        });
+                            this.storage.CommonTransaction.insertMany(dbTransactions);
+                        }
+
+                        //make callback request
+                        if(this._callbackEnabled) {
+                            ownCommonTransactions.forEach(ownTransaction => {
+                                console.log(`[TRX] transaction happened: ${ownTransaction.txID}`);
+                                rp({
+                                    method: "GET",
+                                    uri: this.config.walletChangeCallback.callbackUri + "/trx/" + ownTransaction.txID,
+                                    json: true
+                                });
+                            });
+                        }
                     }
 
                     //prepare next loop block object

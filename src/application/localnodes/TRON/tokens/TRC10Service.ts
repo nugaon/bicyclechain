@@ -9,6 +9,7 @@ import { sendedTransaction, trxTransaction, block, accountData, extendedTransact
 import { TRC10Token, tokenCreateOptions } from "./ITRC10";
 import { default as Boom } from "boom";
 import { default as TronWeb } from 'tronweb';
+import { BigNumber } from "bignumber.js";
 
 export class TRC10Service {
 
@@ -22,6 +23,7 @@ export class TRC10Service {
     private config: Config;
     private lastBlockNumberAtCallback: number; //the last emitted block number at callback
     private client: TronWeb;
+    private decimals: number;
 
     constructor(tronService: TronService, storage: TronDB, client: TronWeb, tokenID: string, routeName: string) {
         this.tronService = tronService;
@@ -43,10 +45,17 @@ export class TRC10Service {
             `\n[${this.tokenSymbol}] Webpage: ${this.tokenInstance.url}` +
             `\n[${this.tokenSymbol}] Lifetime: ${new Date(this.tokenInstance.start_time)}- ${new Date(this.tokenInstance.end_time)}` +
             `\n[${this.tokenSymbol}] Description: ${this.tokenInstance.description}`);
+            if(this.tokenInstance.precision) {
+                console.log(`[${this.tokenSymbol}] Precision: ${this.tokenInstance.precision}`);
+                this.decimals = this.tokenInstance.precision;
+            } else {
+                this.decimals = 0;
+            }
 
-            if(this.config.walletChangeCallback && this.config.walletChangeCallback.enabled) {
-                console.log(`[${this.tokenSymbol}] send callbacks to ${this.config.walletChangeCallback.callbackUri} with ${this.routeName} symbol and cron ${this.config.walletChangeCallback.cron.interval}`);
-                await this.initCallback();
+            if(this.tronService.callbackEnabled) {
+                //handles by TronService
+                console.log(`[${this.tokenSymbol}] send callbacks to ${this.config.walletChangeCallback.callbackUri}/${this.routeName}`
+                    + ` and cron ${this.config.walletChangeCallback.cron.interval}`);
             }
         } catch(e) {
             throw new Error(e);
@@ -128,23 +137,32 @@ export class TRC10Service {
         return this.nativeTransactionToRegularTransaction(nativeTransaction, category);
     }
 
-    public async getAccountBalance(account: string): Promise<number> {
+    public async getAccountBalance(account: string): Promise<string> {
         const accountData: accountData = await this.client.trx.getAccount(account);
-        accountData.asset.forEach(asset => {
-            if(asset.key === this.tokenID) {
-                return asset.value;
+        if(accountData.asset) {
+            for(const asset of accountData.asset) {
+                if(asset.key.toString() === this.tokenID) {
+                    return this.transformFromBasicUnit(asset.value + "");
+                }
             }
-        });
-        accountData.assetV2.forEach(asset => {
-            if(asset.key === this.tokenID) {
-                return asset.value;
+        }
+        if(accountData.assetV2) {
+            for(const asset of accountData.assetV2) {
+                if(asset.key.toString() === this.tokenID) {
+                    return this.transformFromBasicUnit(asset.value + "");
+                }
             }
-        });
-        return 0;
+        }
+        return "0";
     }
 
     public async sendTokenFromMainAccount(to: string, amount: string): Promise<sendedTransaction> {
-        return this.client.trx.sendToken(to, amount, this.tokenID, this.config.mainAccount.privateKey);
+        try {
+            const response = await this.client.trx.sendToken(to, this.transformToBasicUnit(amount), this.tokenID, this.config.mainAccount.privateKey);
+            return response;
+        } catch(e) {
+            throw Boom.notAcceptable(e);
+        }
     }
 
     /**
@@ -152,7 +170,7 @@ export class TRC10Service {
     *
     * @param  {string} from sender address
     * @param  {string} to destination address
-    * @param  {string} amount
+    * @param  {string} amount with used decimals
     * @param  {string} senderPrivateKey private key of the sender, optional
     * @return {sendedTransaction} object of the sended transaction
     */
@@ -161,7 +179,13 @@ export class TRC10Service {
         if(!accountPrivateKey) {
             throw Boom.unauthorized(`The application doesn't have private key for ${from} account. Please pass private key for withdraw.`);
         }
-        return this.client.trx.sendToken(to, amount, this.tokenID, accountPrivateKey);
+        try {
+            const response = await this.client.trx.sendToken(to, this.transformToBasicUnit(amount), this.tokenID, accountPrivateKey);
+            return response;
+        } catch(e) {
+            throw Boom.notAcceptable(e);
+        }
+
     }
 
     public hasOwnExplorer(): boolean {
@@ -178,18 +202,26 @@ export class TRC10Service {
     * @param  {trxTransaction} transaction native transaction object
     * @return {boolean} true if it was a normal trx transaction
     */
-    private tokenTransactionValidation(transaction: trxTransaction): boolean {
+    public tokenTransactionValidation(transaction: trxTransaction): boolean {
         for (const returning of transaction.ret) {
             if(returning.contractRet !== "SUCCESS") {
                 return false;
             }
         }
         for (const contract of transaction.raw_data.contract) {
-            if(contract.type !== "TransferAssetContract" || contract.parameter.value.asset_name + "" !== this.tokenID) {
+            if(contract.type !== "TransferAssetContract" || this.client.toAscii(contract.parameter.value.asset_name) !== this.tokenID) {
                 return false;
             }
         }
         return true;
+    }
+
+    private transformToBasicUnit(amount: string): string {
+        return new BigNumber(amount).multipliedBy(new BigNumber(10).pow(this.decimals)).integerValue().toString();
+    }
+
+    private transformFromBasicUnit(amount: string): string {
+        return new BigNumber(amount).multipliedBy(new BigNumber(10).pow(-this.decimals)).toString();
     }
 
     private async nativeTransactionToRegularTransaction(nativeTransaction: extendedTransaction, category: "SEND" | "RECEIVE" | "OTHER"): Promise <ITransaction> {
@@ -201,7 +233,7 @@ export class TRC10Service {
 
         return {
             txid: nativeTransaction.txID,
-            amount: value + "",
+            amount: this.transformFromBasicUnit(value + ""),
             confirmations: currentBlockNumber - txBlockNumber,
             category: category,
             from: senderAddress,
@@ -217,51 +249,5 @@ export class TRC10Service {
     private async getOwnedAccount(address: string): Promise<IAccount> {
         const account = await this.storage.Account.findOne({address: address});
         return account;
-    }
-
-    private async initCallback() {
-        if(this.config.walletChangeCallback.cron.startBlockNumber) {
-            this.lastBlockNumberAtCallback = this.config.walletChangeCallback.cron.startBlockNumber;
-        } else {
-            this.lastBlockNumberAtCallback = await this.getBlockNumber();
-        }
-        cron.schedule(this.config.walletChangeCallback.cron.interval, async () => {
-            try {
-                const accounts = await this.getAccounts();
-                let loopBlock: block = await this.tronService.getBlockByNumber();
-                let loopBlockNumber = loopBlock.block_header.raw_data.number;
-                const recentBlockNumber = loopBlockNumber; //after the transactions check this value overwrite the lastBlockNumberAtCallback value
-                while(loopBlockNumber > this.lastBlockNumberAtCallback) {
-                    //gather txids which affected the application's accounts.
-                    const ownTxIds: Array<string> = []; //txids of the transactions which affect the accounts that the application handles
-                    if(loopBlock.transactions) {
-                        loopBlock.transactions.forEach(transaction => {
-                            const transactionAddresses = this.tronService.getAddressesInTrxTransaction(transaction);
-                            accounts.forEach(account => {
-                                if(transactionAddresses.includes(account)) {
-                                    ownTxIds.push(transaction.txID);
-                                }
-                            });
-                        });
-
-                        //make callback request
-                        ownTxIds.forEach(txid => {
-                            console.log(`[${this.tokenSymbol}] transaction happened: ${txid}`);
-                            rp({
-                                method: "GET",
-                                uri: this.config.walletChangeCallback.callbackUri + "/" + this.routeName + "/" + txid,
-                                json: true
-                            });
-                        });
-                    }
-
-                    //prepare next loop block object
-                    loopBlock = await this.tronService.getBlockByNumber(--loopBlockNumber);
-                }
-                this.lastBlockNumberAtCallback = recentBlockNumber;
-            } catch (e) {
-                console.log(`[${this.tokenSymbol}] ERROR: callback error`, e);
-            }
-        });
     }
 }

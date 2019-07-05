@@ -18,6 +18,11 @@ export class CryptoCurrencyValidator {
                 this.availableCurrencyRoutes.push(token.route);
             });
         }
+        if (environment.localnodeConfigs.TRON && environment.localnodeConfigs.TRON.withTokens) {
+            environment.localnodeConfigs.TRON.withTokens.forEach((token) => {
+                this.availableCurrencyRoutes.push(token.route);
+            });
+        }
     }
     public account() {
         return {
