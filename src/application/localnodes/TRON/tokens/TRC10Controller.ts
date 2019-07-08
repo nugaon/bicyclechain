@@ -3,13 +3,24 @@ import { TronDB } from "../TronDB";
 import { TronService } from "../TronService";
 import { TRC10Service } from "./TRC10Service";
 import { default as TronWeb } from 'tronweb';
+import { default as Boom } from "boom";
+import { trxTransaction } from "../ITron";
+import { ITRC10Transfer, DbTransactionsToRegularTransactions } from "../TronDB";
 
 export class TRC10Controller implements ICryptoCurrency {
 
     private service: TRC10Service;
+    private _routeName: string;
+
+
 
     constructor(tronService: TronService, tronDB: TronDB, client: TronWeb, contractAddress: string, routeName: string) {
         this.service = new TRC10Service(tronService, tronDB, client, contractAddress, routeName);
+        this._routeName = routeName;
+    }
+
+    get routeName(): string {
+        return this._routeName;
     }
 
     public async onInit() {
@@ -36,24 +47,37 @@ export class TRC10Controller implements ICryptoCurrency {
     }
 
     public async listAccountTransactions(req: any) {
-        // const account = req.params.account;
-        // const page = (req.payload && req.payload.page) ? req.payload.page : 1;
-        // const offset = (req.payload && req.payload.offset) ? req.payload.offset : 100;
-        // const currentBlockNumber = await this.service.getBlockNumber(); //to calculate confirmations
-        // let standardizedTransactions: Array<ITransaction> = [];
-        // if(this.service.hasOwnExplorer()) {
-        //     const transactions: Array<IERC20Transfer> = await this.service.listAccountTransactionsFromDb(account, page, offset);
-        //     if(transactions) {
-        //         standardizedTransactions = DbERC20TransactionsToRegularTransactions(transactions, currentBlockNumber, account);
-        //     }
-        // } else {
-        //     const transactions: Array<IEtherscanTransaction> | undefined = await this.service.listAccountTransactionsFromEtherscan(account);
-        //     if(transactions) {
-        //         standardizedTransactions = etherscanTransactionsToRegularTransactions(transactions, account);
-        //     }
-        // }
-        // return standardizedTransactions;
-        return null;
+        const account = req.params.account;
+        const page = (req.payload && req.payload.page) ? req.payload.page : 1;
+        const offset = (req.payload && req.payload.offset) ? req.payload.offset : 100;
+        const currentBlockNumber = await this.service.getBlockNumber(); //to calculate confirmations
+        let standardizedTransactions: Array<ITransaction> = [];
+        if(this.service.hasOwnExplorer()) {
+            const transactions: Array<ITRC10Transfer> = await this.service.listAccountTransactionsFromDb(account, page, offset);
+            if(transactions) {
+                standardizedTransactions = DbTransactionsToRegularTransactions(transactions, currentBlockNumber, this.service.addressToHex(account));
+            }
+        } else {
+            throw Boom.failedDependency(`BicycleChain does not connect to the MongoDB so this service is not available.`);
+        }
+        return standardizedTransactions;
+    }
+
+    public async listAccountDeposits(req: any) {
+        const account = req.params.account;
+        const page = (req.payload && req.payload.page) ? req.payload.page : 1;
+        const offset = (req.payload && req.payload.offset) ? req.payload.offset : 100;
+        const currentBlockNumber = await this.service.getBlockNumber(); //to calculate confirmations
+        let standardizedTransactions: Array<ITransaction> = [];
+        if(this.service.hasOwnExplorer()) {
+            const transactions: Array<ITRC10Transfer> = await this.service.listAccountDepositsFromDb(account, page, offset);
+            if(transactions) {
+                standardizedTransactions = DbTransactionsToRegularTransactions(transactions, currentBlockNumber, this.service.addressToHex(account));
+            }
+        } else {
+            throw Boom.failedDependency(`BicycleChain does not connect to the MongoDB so this service is not available.`);
+        }
+        return standardizedTransactions;
     }
 
     public async getTransaction(txid: string) {
@@ -68,28 +92,6 @@ export class TRC10Controller implements ICryptoCurrency {
         const account = req.params.account;
         const txid = req.params.txid;
         return this.service.getAccountTransaction(account, txid);
-    }
-
-    public async listAccountDeposits(req: any) {
-        // const account = req.params.account;
-        // const page = (req.payload && req.payload.page) ? req.payload.page : 1;
-        // const offset = (req.payload && req.payload.offset) ? req.payload.offset : 100;
-        //
-        // const currentBlockNumber = await this.service.getBlockNumber(); //to calculate confirmations
-        // let standardizedTransactions: Array<ITransaction> = [];
-        // if(this.service.hasOwnExplorer()) {
-        //     const transactions: Array<IERC20Transfer> = await this.service.listAccountDepositsFromDb(account, page, offset);
-        //     if(transactions) {
-        //         standardizedTransactions = DbERC20TransactionsToRegularTransactions(transactions, currentBlockNumber, account);
-        //     }
-        // } else {
-        //     const transactions: Array<IEtherscanTransaction> | undefined = await this.service.listAccountDepositsFromEtherscan(account);
-        //     if(transactions) {
-        //         standardizedTransactions = etherscanTransactionsToRegularTransactions(transactions, account);
-        //     }
-        // }
-        // return standardizedTransactions;
-        return null;
     }
 
     public async performWithdraw(req: any) {
@@ -130,5 +132,9 @@ export class TRC10Controller implements ICryptoCurrency {
         return new Promise<IAddressCheck>((resolve) => {
             resolve({ address: req.params.address, valid: valid });
         });
+    }
+
+    public transactionValidation(transaction: trxTransaction): boolean {
+        return this.service.tokenTransactionValidation(transaction);
     }
 }

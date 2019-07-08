@@ -5,11 +5,12 @@ import { TronService } from "../TronService";
 import { ILocalNodeConfig as Config} from "../ILocalNodeConfig";
 import * as cron from "node-cron";
 import { ITransaction } from "../../../cryptoCurrencies/ICryptoCurrency";
-import { sendedTransaction, trxTransaction, block, accountData, extendedTransaction } from "../ITron";
+import { sendedTransaction, trxTransaction, block, accountData, extendedTransaction, trxTransactionInfo } from "../ITron";
 import { TRC10Token, tokenCreateOptions } from "./ITRC10";
 import { default as Boom } from "boom";
 import { default as TronWeb } from 'tronweb';
 import { BigNumber } from "bignumber.js";
+import { ITRC10Transfer } from "../TronDB";
 
 export class TRC10Service {
 
@@ -189,7 +190,7 @@ export class TRC10Service {
     }
 
     public hasOwnExplorer(): boolean {
-        return this.storage && environment.localnodeConfigs.Ethereum.mongoDB.saveContractTransactions;
+        return this.tronService.hasOwnExplorer();
     }
 
     public async getBlockNumber(): Promise<number> {
@@ -214,6 +215,67 @@ export class TRC10Service {
             }
         }
         return true;
+    }
+
+    public async listAccountTransactionsFromDb(account: string, page: number = 1, offset: number = 100): Promise<Array<ITRC10Transfer>> {
+        const accountInHex = this.client.address.toHex(account);
+        const conractAddress = this.client.fromAscii(this.tokenID).substring(2);
+
+        const transactions: Array<ITRC10Transfer> = await this.storage.TRC10Transfer.find({
+                $and: [
+                    { $or:[ { from: accountInHex }, { to: accountInHex } ]},
+                    { contractAddress: conractAddress }
+                ]
+            })
+            .sort({ timestamp: -1 })
+            .skip((page - 1) * offset).limit(offset);
+
+        for(let transaction of transactions) {
+            //if this is the first query for these transactions we should append the blocknumber also
+            if(!transaction.blockNumber) {
+                const transactionReceipt: trxTransactionInfo = await this.client.trx.getTransactionInfo(transaction.transactionHash);
+                if(transactionReceipt && transactionReceipt.blockNumber) {
+                    transaction.blockNumber = transactionReceipt.blockNumber;
+                    transaction.save();
+                }
+            }
+
+            transaction.value = this.transformFromBasicUnit(transaction.value);
+        }
+        return transactions;
+    }
+
+    public async listAccountDepositsFromDb(account: string, page: number = 1, offset: number = 100): Promise<Array<ITRC10Transfer>> {
+        const accountInHex = this.client.address.toHex(account);
+        const conractAddress = this.client.fromAscii(this.tokenID).substring(2);
+
+        const transactions: Array<ITRC10Transfer> = await this.storage.TRC10Transfer.find({
+                $and: [
+                    { to: accountInHex },
+                    { contractAddress: conractAddress }
+                ]
+            })
+            .sort({ timestamp: -1 })
+            .skip((page - 1) * offset).limit(offset);
+
+        for(let transaction of transactions) {
+            //if this is the first query for these transactions we should append the blocknumber also
+            if(!transaction.blockNumber) {
+                const transactionReceipt: trxTransactionInfo = await this.client.trx.getTransactionInfo(transaction.transactionHash);
+                if(transactionReceipt && transactionReceipt.blockNumber) {
+                    transaction.blockNumber = transactionReceipt.blockNumber;
+                    transaction.save();
+                }
+            }
+
+            transaction.value = this.transformFromBasicUnit(transaction.value);
+        }
+
+        return transactions;
+    }
+
+    public addressToHex(address: string) {
+        return this.client.address.toHex(address);
     }
 
     private transformToBasicUnit(amount: string): string {

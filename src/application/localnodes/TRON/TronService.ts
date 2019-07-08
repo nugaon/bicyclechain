@@ -4,8 +4,8 @@ import {default as rp } from "request-promise-native";
 import { default as Boom } from "boom";
 import { ITransaction } from "../../cryptoCurrencies/ICryptoCurrency";
 import { default as TronWeb } from 'tronweb';
-import { sendedTransaction, trxTransaction, block, createdAccount, extendedTransaction } from "./ITron";
-import { TronDB, IAccount, TRC10Transfer, CommonTransaction } from "./TronDB";
+import { sendedTransaction, trxTransaction, block, createdAccount, extendedTransaction, trxTransactionInfo } from "./ITron";
+import { TronDB, IAccount, TRC10Transfer, CommonTransaction, ICommonTransaction } from "./TronDB";
 import * as cron from "node-cron";
 import { ICryptoCurrency, ITokenRouteMapping } from "../../cryptoCurrencies/ICryptoCurrency";
 import { AsyncForeach } from "../../generic/AsyncForeach";
@@ -24,6 +24,7 @@ export class TronService {
     private saveGeneratedUsersIntoDb: boolean;
     private _callbackEnabled: boolean;
     private _observerNeededToEnvoke: boolean;
+    private trc10ControllerInstances: Array<TRC10Controller>; //for walletChange events
 
     constructor() {
         this.config = environment.localnodeConfigs.TRON;
@@ -32,6 +33,8 @@ export class TronService {
             this.tokens = this.config.withTokens;
         }
         this.saveGeneratedUsersIntoDb = this.config.mongoDB && this.config.mongoDB.saveGeneratedUsers ? true : false;
+
+        this.trc10ControllerInstances = [];
     }
 
     get callbackEnabled(): boolean {
@@ -93,12 +96,20 @@ export class TronService {
     ): Promise<Array<ITransaction>> {
         const offset = (options && options.offset) ? options.offset : 100;
         const page = (options && options.page) ? options.page - 1 : 0;
-        const sendedTransactions = await this.client.trx.getTransactionsFromAddress(account, offset, page);
-        const receivedTransactions = await this.client.trx.getTransactionsToAddress(account, offset, page);
-        const mergedTransactions = {...sendedTransactions, ...receivedTransactions};
+        try {
+            console.log("acc", account);
+            console.log("offset", offset);
+            console.log("page", page);
+            const sendedTransactions = await this.client.trx.getTransactionsFromAddress(account, offset, 1);
+            console.log("sendedtransactions", sendedTransactions);
+            const receivedTransactions = await this.client.trx.getTransactionsToAddress(account, offset, page);
+            const mergedTransactions = {...sendedTransactions, ...receivedTransactions};
 
-        console.log(`transactions`, mergedTransactions);
-        return null;
+            console.log(`transactions`, mergedTransactions);
+            return null;
+        } catch(e) {
+            throw Boom.notAcceptable(e);
+        }
     }
 
     public async getTransaction(txid: string): Promise<ITransaction> {
@@ -258,6 +269,9 @@ export class TronService {
                         referenceId: refereinceId
                     });
                     tokenInstances[refereinceId] = tokenInstance;
+
+                    //we also save the TRC10 token instances into this class field
+                    this.trc10ControllerInstances.push(tokenInstance);
                 } else if (token.type === "TRC20") {
                     const tokenInstance = new TRC20Controller(this, this.storage, this.client, token.contractAddress, token.route);
                     await tokenInstance.onInit();
@@ -334,6 +348,61 @@ export class TronService {
 
     public setDefaultPrivateKey() {
         this.client.setPrivateKey(this.config.mainAccount.privateKey);
+    }
+
+    public async listAccountTransactionsFromDb(account: string, page: number = 1, offset: number = 100): Promise<Array<ICommonTransaction>> {
+        const accountInHex = this.client.address.toHex(account);
+
+        const transactions: Array<ICommonTransaction> = await this.storage.CommonTransaction.find({
+                $or:[ { from: accountInHex }, { to: accountInHex } ]
+            })
+            .sort({ timestamp: -1 })
+            .skip((page - 1) * offset).limit(offset);
+
+        for(let transaction of transactions) {
+            //if this is the first query for these transactions we should append the blocknumber also
+            if(!transaction.blockNumber) {
+                const transactionReceipt: trxTransactionInfo = await this.client.trx.getTransactionInfo(transaction.transactionHash);
+                if(transactionReceipt && transactionReceipt.blockNumber) {
+                    transaction.blockNumber = transactionReceipt.blockNumber;
+                    transaction.save();
+                }
+            }
+
+            transaction.value = this.client.fromSun(transaction.value);
+        }
+        return transactions;
+    }
+
+    public async listAccountDepositsFromDb(account: string, page: number = 1, offset: number = 100): Promise<Array<ICommonTransaction>> {
+        const accountInHex = this.client.address.toHex(account);
+
+        const transactions: Array<ICommonTransaction> = await this.storage.CommonTransaction.find({
+                $and: [
+                    { to: accountInHex }
+                ]
+            })
+            .sort({ timestamp: -1 })
+            .skip((page - 1) * offset).limit(offset);
+
+        for(let transaction of transactions) {
+            //if this is the first query for these transactions we should append the blocknumber also
+            if(!transaction.blockNumber) {
+                const transactionReceipt: trxTransactionInfo = await this.client.trx.getTransactionInfo(transaction.transactionHash);
+                if(transactionReceipt && transactionReceipt.blockNumber) {
+                    transaction.blockNumber = transactionReceipt.blockNumber;
+                    transaction.save();
+                }
+            }
+
+            transaction.value = this.client.fromSun(transaction.value);
+        }
+
+        return transactions;
+    }
+
+    public addressToHex(address: string) {
+        return this.client.address.toHex(address);
     }
 
     private async getOwnedAccountPrivateKey(address: string): Promise<string> {
@@ -414,7 +483,7 @@ export class TronService {
                 while(loopBlockNumber > this.lastBlockNumberAtCallback) {
                     //gather txids which affected the application's accounts.
                     const ownCommonTransactions: Array<trxTransaction> = []; //tthe transactions which affected the accounts that the application handles and belongs to normal trx transactions
-                    const ownTRC10Transactions: Array<trxTransaction> = []; //tthe transactions which affected the accounts that the application handles and belongs to normal TRC10 transactions
+                    const ownTRC10Transactions: Object = {}; //the transactions which affected the accounts that the application handles and belongs to normal TRC10 transactions. routeName -> Array<transactions> array
 
                     if(loopBlock.transactions) {
                         loopBlock.transactions.forEach(transaction => {
@@ -422,10 +491,16 @@ export class TronService {
                             accounts.forEach(account => {
                                 if(transactionAddresses.includes(account)) {
                                     if (this.trxTransactionValidation(transaction)) {
-                                        console.log("HE3!")
                                         ownCommonTransactions.push(transaction);
-                                    } else { //it must be trc10 transaction
-                                        //TODO
+                                    } else { //it must be token transactions
+                                        this.trc10ControllerInstances.forEach(trxTokenController => {
+                                            if(trxTokenController.transactionValidation(transaction)) {
+                                                if(!ownTRC10Transactions[trxTokenController.routeName]) {
+                                                    ownTRC10Transactions[trxTokenController.routeName] = [];
+                                                }
+                                                ownTRC10Transactions[trxTokenController.routeName].push(transaction);
+                                            }
+                                        });
                                     }
                                 }
                             });
@@ -433,7 +508,6 @@ export class TronService {
 
                         //save into the db
                         if(this.hasOwnExplorer()) {
-                            console.log("HE!")
                             //trx transactions
                             const dbTransactions: Array<CommonTransaction> = [];
                             ownCommonTransactions.forEach(transaction => {
@@ -445,14 +519,36 @@ export class TronService {
                                     from: transaction.raw_data.contract[0].parameter.value.owner_address,
                                     to: transaction.raw_data.contract[0].parameter.value.to_address,
                                     refBlockHash: transaction.raw_data.ref_block_hash,
-                                    timestamp: transaction.raw_data.timestamp,
+                                    timestamp: transaction.raw_data.timestamp
                                 });
                             });
                             this.storage.CommonTransaction.insertMany(dbTransactions);
+
+                            //token transactions
+                            const dbTokenTransactions: Array<TRC10Transfer> = [];
+
+                            for (const key in ownTRC10Transactions) {
+                                const transactions: Array<trxTransaction> = ownTRC10Transactions[key];
+                                transactions.forEach(transaction => {
+                                    console.log("transactiondb", transaction);
+                                    dbTokenTransactions.push({
+                                        contractRet: transaction.ret[0].contractRet,
+                                        transactionHash: transaction.txID,
+                                        value: transaction.raw_data.contract[0].parameter.value.amount + "",
+                                        from: transaction.raw_data.contract[0].parameter.value.owner_address,
+                                        to: transaction.raw_data.contract[0].parameter.value.to_address,
+                                        refBlockHash: transaction.raw_data.ref_block_hash,
+                                        timestamp: transaction.raw_data.timestamp,
+                                        contractAddress: transaction.raw_data.contract[0].parameter.value.asset_name
+                                    });
+                                });
+                            }
+                            this.storage.TRC10Transfer.insertMany(dbTokenTransactions);
                         }
 
                         //make callback request
                         if(this._callbackEnabled) {
+                            //trx transactions
                             ownCommonTransactions.forEach(ownTransaction => {
                                 console.log(`[TRX] transaction happened: ${ownTransaction.txID}`);
                                 rp({
@@ -461,6 +557,19 @@ export class TronService {
                                     json: true
                                 });
                             });
+
+                            //token transactions
+                            for (const key in ownTRC10Transactions) {
+                                const ownTransactions: Array<trxTransaction> = ownTRC10Transactions[key];
+                                ownTransactions.forEach(ownTransaction => {
+                                    console.log(`[${key}] transaction happened: ${ownTransaction.txID}`);
+                                    rp({
+                                        method: "GET",
+                                        uri: this.config.walletChangeCallback.callbackUri + `/${key}/` + ownTransaction.txID,
+                                        json: true
+                                    });
+                                });
+                            }
                         }
                     }
 

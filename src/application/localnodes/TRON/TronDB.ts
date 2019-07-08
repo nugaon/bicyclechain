@@ -1,7 +1,7 @@
 import { Document, Schema, Model, createConnection, Connection} from "mongoose";
 import { environment } from "../../../environments/environment";
 import { ITransaction } from "../../cryptoCurrencies/ICryptoCurrency";
-import { extendedTransaction } from "./ITron";
+import { default as TronWeb } from 'tronweb';
 
 export class TronDB {
 
@@ -64,7 +64,8 @@ export class TronDB {
             to: String,
             refBlockHash: String,
             timestamp: Number,
-            contractAddress: String
+            contractAddress: String,
+            blockNumber: Number //not sure save like this first
         });
         this.TRC10TransferModel = this.client.model<ITRC10Transfer>("TRC10Transfer",  this.TRC10TransferSchema);
 
@@ -75,7 +76,8 @@ export class TronDB {
             from: String,
             to: String,
             refBlockHash: String,
-            timestamp: Number
+            timestamp: Number,
+            blockNumber: Number, //not sure save like this first
         });
         this.CommonTransactionModel = this.client.model<ICommonTransaction>("CommonTransaction",  this.CommonTransactionSchema);
     }
@@ -122,6 +124,7 @@ export interface CommonTransaction {
     to: string,
     refBlockHash: string,
     timestamp: number,
+    blockNumber?: number
 }
 
 export interface ICommonTransaction extends Document, CommonTransaction { }
@@ -132,10 +135,10 @@ export interface TRC10Transfer extends CommonTransaction {
 
 export interface ITRC10Transfer extends Document, TRC10Transfer { }
 
-export function DbTRC20TransactionsToRegularTransactions(transactions: ITRC20Transfer[], currentBlock: number, requestAddressInHex: string): Array<ITransaction> {
+export function DbTransactionsToRegularTransactions(transactions: ITRC20Transfer[] | ITRC10Transfer[] | CommonTransaction[], currentBlock: number, requestAddressInHex: string): Array<ITransaction> {
     const standardizedTransactions: ITransaction[] = [];
 
-    transactions.forEach((transaction: ITRC20Transfer) => {
+    transactions.forEach((transaction: ITRC20Transfer | ITRC10Transfer | CommonTransaction) => {
         let category: ITransaction["category"];
         if(requestAddressInHex !== transaction.from && requestAddressInHex === transaction.to) {
             category = "RECEIVE";
@@ -150,8 +153,8 @@ export function DbTRC20TransactionsToRegularTransactions(transactions: ITRC20Tra
             amount: transaction.value,
             confirmations: currentBlock - transaction.blockNumber,
             category: category,
-            from: transaction.from,
-            to: transaction.to
+            from: TronWeb.address.fromHex(transaction.from),
+            to: TronWeb.address.fromHex(transaction.to)
         };
         standardizedTransactions.push(standardizedTransaction);
     });

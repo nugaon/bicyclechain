@@ -4,7 +4,7 @@ import { TronService } from "../TronService";
 import { TRC20Service } from "./TRC20Service";
 import { default as TronWeb } from 'tronweb';
 import { default as Boom } from "boom";
-import { ITRC20Transfer, DbTRC20TransactionsToRegularTransactions } from "../TronDB";
+import { ITRC20Transfer, DbTransactionsToRegularTransactions } from "../TronDB";
 
 export class TRC20Controller implements ICryptoCurrency {
 
@@ -46,7 +46,7 @@ export class TRC20Controller implements ICryptoCurrency {
         if(this.service.hasOwnExplorer()) {
             const transactions: Array<ITRC20Transfer> = await this.service.listAccountTransactionsFromDb(account, page, offset);
             if(transactions) {
-                standardizedTransactions = DbTRC20TransactionsToRegularTransactions(transactions, currentBlockNumber, this.service.addressToHex(account));
+                standardizedTransactions = DbTransactionsToRegularTransactions(transactions, currentBlockNumber, this.service.addressToHex(account));
             }
         } else {
             throw Boom.failedDependency(`BicycleChain does not connect to the MongoDB so this service is not available.`);
@@ -63,7 +63,7 @@ export class TRC20Controller implements ICryptoCurrency {
         if(this.service.hasOwnExplorer()) {
             const transactions: Array<ITRC20Transfer> = await this.service.listAccountDepositsFromDb(account, page, offset);
             if(transactions) {
-                standardizedTransactions = DbTRC20TransactionsToRegularTransactions(transactions, currentBlockNumber, this.service.addressToHex(account));
+                standardizedTransactions = DbTransactionsToRegularTransactions(transactions, currentBlockNumber, this.service.addressToHex(account));
             }
         } else {
             throw Boom.failedDependency(`BicycleChain does not connect to the MongoDB so this service is not available.`);

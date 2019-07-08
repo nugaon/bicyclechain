@@ -3,6 +3,7 @@ import { TronService } from "./TronService";
 import { default as Boom } from "boom";
 import { IUniqueEndpoints } from "../../generic/IUniqueEndpoints";
 import { UniqueRoutes } from "./uniqueEndpoints/UniqueRoutes";
+import { DbTransactionsToRegularTransactions, ICommonTransaction } from "./TronDB";
 
 export class TronController implements ICryptoCurrency, ITokenTransporter, IUniqueEndpoints {
 
@@ -45,24 +46,36 @@ export class TronController implements ICryptoCurrency, ITokenTransporter, IUniq
     }
 
     public async listAccountTransactions(req: any) {
-        //TODO
         const account = req.params.account;
-        const offset = (req.payload && req.payload.offset) ? req.payload.offset : 100;
         const page = (req.payload && req.payload.page) ? req.payload.page : 1;
+        const offset = (req.payload && req.payload.offset) ? req.payload.offset : 100;
+        const currentBlockNumber = await this.service.getBlockNumber(); //to calculate confirmations
         let standardizedTransactions: Array<ITransaction> = [];
-        const transactions = await this.service.listAccountTransactions(account, {offset: offset, page: page});
-        // const currentBlockNumber = await this.service.getBlockNumber(); //to calculate confirmations
-
+        if(this.service.hasOwnExplorer()) {
+            const transactions: Array<ICommonTransaction> = await this.service.listAccountTransactionsFromDb(account, page, offset);
+            if(transactions) {
+                standardizedTransactions = DbTransactionsToRegularTransactions(transactions, currentBlockNumber, this.service.addressToHex(account));
+            }
+        } else {
+            throw Boom.failedDependency(`BicycleChain does not connect to the MongoDB so this service is not available.`);
+        }
         return standardizedTransactions;
     }
 
     public async listAccountDeposits(req: any) {
-        //TODO
         const account = req.params.account;
-        const offset = (req.payload && req.payload.offset) ? req.payload.offset : 100;
         const page = (req.payload && req.payload.page) ? req.payload.page : 1;
+        const offset = (req.payload && req.payload.offset) ? req.payload.offset : 100;
+        const currentBlockNumber = await this.service.getBlockNumber(); //to calculate confirmations
         let standardizedTransactions: Array<ITransaction> = [];
-
+        if(this.service.hasOwnExplorer()) {
+            const transactions: Array<ICommonTransaction> = await this.service.listAccountDepositsFromDb(account, page, offset);
+            if(transactions) {
+                standardizedTransactions = DbTransactionsToRegularTransactions(transactions, currentBlockNumber, this.service.addressToHex(account));
+            }
+        } else {
+            throw Boom.failedDependency(`BicycleChain does not connect to the MongoDB so this service is not available.`);
+        }
         return standardizedTransactions;
     }
 

@@ -239,7 +239,32 @@ Payload:
 
 ### TRON
 
+> post /api/v1/trx/createTRC10Token
 
+Create TRC10 token on the TRON Network
+Payload:
+
+```json
+{
+    "name": "Petty", /* Name of the token */
+    "abbreviation": "PEY", /* The short acronym of the token */
+    "description": "Everyone deserves a Petty.", /* Description of the asset */
+    "url": "https://pettytoken.network", /* Official webpage of the asset */
+    "totalSupply": 1000000, /* The all available token for the asset (in case of use decimals, it remains the same amount like without that)* /
+    "trxRatio": 1, /* How much TRX will tokenRatio cost? */
+    "tokenRatio": 1 , /* How many tokens will trxRatio afford? */
+    "saleStart": 1580437783000, / * Timestamp. When the token ICO starts. Default is the current time */
+    "saleEnd": 1580437783, /* Timestamp. When the token ICO ends. Default is the current time + 60 seconds */
+    "freeBandwidth": 10000, /* The creator's donated bandwidth for use by token holders. Default 0 */
+    "freeBandwidthLimit":  1000000, /* Out of totalFreeBandwidth; the amount each token holder get. Default 0 */
+    "frozenAmount":  100000, /* How many token will locked. Default 1 */
+    "frozenDuration": 1, /* Number of days. How much time token will locked. Default 1 */
+    "precision": 8, /* Precision of the token values. */
+    "additionalParams": { /* optional */
+        "callFromPrivateKey": "e5b30d0ebd5fd3ea24e0a07fc3b697f550c6ed5cf4895034ee9f379711aefb10" /* The private key that will be used to sign the transaction */
+    }
+}
+```
 
 # Notes for Local Nodes
 To running this API with full functionalities for some local nodes MongoDB needed to have. You can run a simple MongoDB instance with Docker
@@ -247,6 +272,8 @@ To running this API with full functionalities for some local nodes MongoDB neede
 
 Call its CLI with
 > docker exec -ti bicyclechain-mongo mongo
+
+Listing account transactions in most of the cases only work with * owned accounts * .
 
 ## TRON
 For TRON network suggested to set up an MongoDB database in the interest of account handling (the application save the generated accounts into the database).
