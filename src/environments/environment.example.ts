@@ -165,6 +165,43 @@ export const environment: AppConfiguration = {
                     HIGH: 1.5
                 }
             }
+        },
+
+        TRON: {
+            clientConfig: {
+                fullHost: "http://127.0.0.1:8090",
+            },
+            mainAccount: {
+                address: "TWrCD448j7c6NVXKeF8(...)",
+                privateKey: "961e9f81976cea478(...)"
+            },
+            withTokens: [{
+                tokenID: "1000(...)",
+                route: "petty",
+                type: "TRC10"
+             }, {
+                contractAddress: "TD46UAGUaoe8tTsMN(...)",
+                type: "TRC20",
+                route: "petty2"
+             }
+            ],
+            fees: {
+                priorityMultipliers: {
+                    LOW: 1,
+                    MEDIUM: 1.2,
+                    HIGH: 1.5
+                }
+            },
+            mongoDB: {
+                connectionUri: "mongodb://127.0.0.1:27017/tron"
+            },
+            walletChangeCallback: {
+                callbackUri: "http://127.0.0.1/coin",
+                enabled: true,
+                cron: {
+                    interval: "0 * * * * *"
+                }
+            }
         }
 
     }

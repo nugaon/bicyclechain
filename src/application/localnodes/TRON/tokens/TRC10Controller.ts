@@ -12,8 +12,6 @@ export class TRC10Controller implements ICryptoCurrency {
     private service: TRC10Service;
     private _routeName: string;
 
-
-
     constructor(tronService: TronService, tronDB: TronDB, client: TronWeb, contractAddress: string, routeName: string) {
         this.service = new TRC10Service(tronService, tronDB, client, contractAddress, routeName);
         this._routeName = routeName;
