@@ -308,6 +308,8 @@ export class TronService {
         tokenIssueParams.saleEnd = tokenIssueParams.saleEnd ? tokenIssueParams.saleEnd : tokenIssueParams.saleStart + 60000;
         if(tokenIssueParams.precision) {
             tokenIssueParams.totalSupply = new BigNumber(tokenIssueParams.totalSupply).multipliedBy(new BigNumber(10).pow(tokenIssueParams.precision)).integerValue().toNumber();
+            tokenIssueParams.tokenRatio = new BigNumber(tokenIssueParams.tokenRatio).multipliedBy(new BigNumber(10).pow(tokenIssueParams.precision)).integerValue().toNumber();
+
         }
         console.log(`[TRX] token issue:`, tokenIssueParams);
 
