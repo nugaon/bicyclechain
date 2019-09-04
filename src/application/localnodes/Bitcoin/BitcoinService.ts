@@ -417,6 +417,7 @@ export class BitcoinService {
     //the bitcoin only 8
     private roundBitcoin(number: any) {
         const precision = 8;
-        return +number.toFixed(precision);
+        number = +number;
+        return number.toFixed(precision);
     }
 }
