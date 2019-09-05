@@ -10,10 +10,9 @@ import { Api, JsonRpc, RpcError } from 'eosjs';
 import { JsSignatureProvider } from 'eosjs/dist/eosjs-jssig';
 import { fetch } from "node-fetch";
 import { TextEncoder, TextDecoder } from "util";
-import { TransactionTraceRepository } from "./db/TransactionTraceRepository";
-import { TransactionTrace } from "./db/TransactionTrace";
+import { ChainSchema, ITransactionTrace } from "./db/ChainSchema";
 import { Connection, ConnectionOptions, createConnection, getCustomRepository } from "typeorm";
-
+import { IBlockhainInfo } from "./IEosio";
 
 export class EosioService {
 
@@ -21,7 +20,7 @@ export class EosioService {
     private config: ILocalNodeConfig;
     private client: Api;
     private walletClient: Api;
-    private dbConnection: Connection;
+    private chainDb: ChainSchema;
 
     constructor() {
         this.config = environment.localnodeConfigs.EOSIO;
@@ -57,9 +56,20 @@ export class EosioService {
     }
 
     public async getNativeTransaction(txid: string) {
-        const repository: TransactionTraceRepository = getCustomRepository(TransactionTraceRepository);
-        const result = await repository.getTransaction(txid);
-        return result;
+        const blocknum = await this.getTransactionBlockNumber(txid);
+
+        var options = {
+            method: 'POST',
+            uri: `${this.config.rpcClient.nodeURL}/v1/history/get_transaction`,
+            body: {
+                id: txid,
+                block_num_hint: blocknum
+            },
+            json: true // Automatically stringifies the body to JSON
+        };
+
+        const transaction = await rp(options);
+        return transaction;
     }
 
     public async getAccountTransaction(account: string, txid: string): Promise<ITransaction> {
@@ -101,15 +111,32 @@ export class EosioService {
         }
     }
 
-    private async dbConnect() {
-        let connectionOptions: ConnectionOptions = this.config.database;
-        connectionOptions = { ...connectionOptions, entities: [TransactionTrace] };
-        try {
-            const connection: Connection = await createConnection(connectionOptions);
-            this.dbConnection = connection;
-            console.log(`[EOS] Database connection is established with ${connectionOptions.database}`);
-        } catch(errors) {
-            console.log("[EOS] Error while connecting to the database (details bellow)...", errors);
+    private async getCurrentBlockNumber(): Promise<number> {
+        const blockchainInfo = await this.getBlockchainInfo();
+        return blockchainInfo.last_irreversible_block_num;
+    }
+
+    private async getBlockchainInfo(): Promise<IBlockhainInfo> {
+        var options = {
+            method: 'POST',
+            uri: `${this.config.rpcClient.nodeURL}/v1/history/get_info`,
+            json: true // Automatically stringifies the body to JSON
         };
+
+        const info: IBlockhainInfo = await rp(options);
+        return info;
+    }
+
+    private async getTransactionBlockNumber(txid: string): Promise<number> {
+        const transactionTrace: ITransactionTrace = await this.chainDb.getTransactionById(txid);
+        if(!transactionTrace) {
+            throw Boom.notFound(`The transaction '${txid}' not found`);
+        }
+        return transactionTrace.block_num;
+    }
+
+    private async dbConnect() {
+        this.chainDb = new ChainSchema(this.config.database);
+        await this.chainDb.onInit();
     }
 }
