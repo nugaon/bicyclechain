@@ -38,7 +38,7 @@ export class EosioController implements ICryptoCurrency {
         const account = req.params.account;
         const page = (req.payload && req.payload.page) ? req.payload.page : 1;
         const offset = (req.payload && req.payload.offset) ? req.payload.offset : 100;
-        const currentBlockNumber = await this.service.getBlockNumber(); //to calculate confirmations
+        //const currentBlockNumber = await this.service.getBlockNumber(); //to calculate confirmations
         let standardizedTransactions: Array<ITransaction> = [];
 
         return standardizedTransactions;
@@ -63,33 +63,38 @@ export class EosioController implements ICryptoCurrency {
         const page = (req.payload && req.payload.page) ? req.payload.page : 1;
         const offset = (req.payload && req.payload.offset) ? req.payload.offset : 100;
 
-        const currentBlockNumber = await this.service.getBlockNumber(); //to calculate confirmations
+        //const currentBlockNumber = await this.service.getBlockNumber(); //to calculate confirmations
         let standardizedTransactions: Array<ITransaction> = [];
 
         return standardizedTransactions;
     }
 
     public async performWithdraw(req: any) {
-        if (!req.payload.sendTo || !req.payload.amount) {
-            throw Boom.badRequest("Bad parameters");
+        if (!req.payload.additionalParams || !req.payload.additionalParams.memo) {
+            throw Boom.badRequest("Omitted additionalParams.memo at withdrawal.");
         }
 
         const receiver = req.payload.sendTo;
-        const sender = req.payload.sendFrom;
-        const amountInEther = req.payload.amount + "";
-        const password = req.payload.additionalParams && req.payload.additionalParams.password ? req.payload.additionalParams.password : null;
-        const gas = req.payload.additionalParams && req.payload.additionalParams.gas ? req.payload.additionalParams.gas : null;
-        const options = {
-            priority: req.payload.priority,
-            gas: gas
-        };
+        const sender = req.payload.sendFrom ? req.payload.sendFrom : this.service.getMainAccount();
+        const amount = req.payload.amount + "";
+        const memo = req.payload.additionalParams.memo;
 
-        return null;
+        const txid = await this.service.transfer(sender, receiver, amount, memo);
+        return {
+            txid: txid
+        };
     }
 
     public async generateAccount(req: any) {
-        const address = await this.service.generateAccount();
-        return { address: address };
+        if(!req.payload.additionalParams || !req.payload.additionalParams.account) {
+            throw Boom.badRequest("Omitted 'additionalParams.account' data from payload for account generation");
+        }
+        const accountName = req.payload.additionalParams.account;
+        const pubKey = req.payload.additionalParams.pubKey ? req.payload.additionalParams.pubKey : null;
+
+        const transaction = await this.service.generateAccount(accountName, pubKey);
+        console.log("Account generated", transaction);
+        return { address: accountName };
     }
 
     public async isAddress(req: any) {
