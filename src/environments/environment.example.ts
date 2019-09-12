@@ -45,10 +45,43 @@ export const environment: AppConfiguration = {
         {
             route: "cpc",
             class: "Capricoin"
+        },
+        {
+            route: "eos",
+            class: "EOSIO",
         }
     ],
 
     localnodeConfigs: {
+        EOSIO: {
+            mainAccount: {
+                privateKey: "... Your Private Key....",
+                publicKey: "EOS8 ...",
+                accountName: "viktor"
+            },
+            database: { //eosio db filler for Postgre
+                host: "127.0.0.1",
+                port: 5432,
+                user: "postgres",
+                password: "eosio-dbpass",
+                database: "postgres",
+            },
+            rpcClient: {
+                nodeURL: "http://127.0.0.1:8888",
+            },
+            walletChangeCallback: {
+                callbackUri: "127.0.0.1/test", //callback for wallet change
+                enabled: false,
+                cron: {
+                    interval: "0 * * * * *"
+                }
+            },
+            withTokens: [{
+                currency: "SYS",
+                route: "sys",
+                contract: "eosio.token" //optional
+            }]
+        },
         Ethereum: {
             connectionType: "websocket",
             connectionString: "ws://127.0.0.1:8546",
