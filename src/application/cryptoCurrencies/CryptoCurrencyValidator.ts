@@ -23,6 +23,11 @@ export class CryptoCurrencyValidator {
                 this.availableCurrencyRoutes.push(token.route);
             });
         }
+        if (environment.localnodeConfigs.EOSIO && environment.localnodeConfigs.EOSIO.withTokens) {
+            environment.localnodeConfigs.EOSIO.withTokens.forEach((token) => {
+                this.availableCurrencyRoutes.push(token.route);
+            });
+        }
     }
     public account() {
         return {

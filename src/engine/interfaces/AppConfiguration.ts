@@ -5,6 +5,8 @@ import { ILocalNodeConfig as EthereumConfig } from "../../application/localnodes
 import { ILocalNodeConfig as LitecoinConfig } from "../../application/localnodes/Litecoin/ILocalNodeConfig";
 import { ILocalNodeConfig as RippleConfig } from "../../application/localnodes/Ripple/ILocalNodeConfig";
 import { ILocalNodeConfig as TRONConfig } from "../../application/localnodes/TRON/ILocalNodeConfig";
+import { ILocalNodeConfig as EOSIOConfig } from "../../application/localnodes/EOSIO/ILocalNodeConfig";
+
 export interface AppConfiguration {
     /**
      * Is the environment production?
@@ -42,6 +44,7 @@ export interface AppConfiguration {
          Litecoin?: LitecoinConfig;
          Ripple?: RippleConfig;
          TRON?: TRONConfig;
+         EOSIO?: EOSIOConfig;
      };
 }
 

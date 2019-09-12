@@ -93,7 +93,7 @@ export const environment: AppConfiguration = {
         },
         Bitcoin: {
             rpcClient: {
-                username: "cointaner",
+                username: "cointainer",
                 password: "bD0tf5Gm6ohGPAurmkm2ODph0vYAMjbnSBbcBf0ClpM=",
                 network: "testnet",
                 port: 18332

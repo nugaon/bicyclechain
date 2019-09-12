@@ -80,8 +80,8 @@ export class BitcoinController implements ICryptoCurrency {
         const sender = req.payload.sendFrom;
         const amount = req.payload.amount + "";
         let withdrawOptions = {
-            priority: req.payload.additionalParams.priority ? req.payload.additionalParams.priority : "MEDIUM",
-            subFee: req.payload.additionalParams.subFee ? req.payload.additionalParams.subFee : false
+            priority: req.payload.additionalParams && req.payload.additionalParams.priority ? req.payload.additionalParams.priority : "MEDIUM",
+            subFee: req.payload.additionalParams && req.payload.additionalParams.subFee ? req.payload.additionalParams.subFee : false
         };
 
         const txid = await this.service.performWithdraw(sender, receiver, amount, withdrawOptions);

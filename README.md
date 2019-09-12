@@ -283,6 +283,16 @@ It is useful for listing transactions for a given user, also necessary for token
 
 At withdraw you can pass the privateKey of the sender by attend * additionalParams.privateKey * to your payload, if the MongoDB doesn't have the private key of the given address.
 
+## EOSIO
+The Bicyclechain supports only transactions which contains one action at `getTransaction` and `getAccountTransaction` endpoints. For further information call `nativeTransaction`.
+
+For account creation the `additionalInfo.account` has to be specified and optional `additionalInfo.pubKey` can be added to the payload.
+If you omit the latter, the application will use public key of your main account.
+
+The balance change tracking only watch the main account's balance changes.
+
+The `listAccountTransactions` and the `listAccountDeposits` only check the "Transfer" methods in the token contracts, by the original action ordinal.
+
 # Contribution
 On a separated branch you can make pull request for your cryptocurrency integration.
 The condition for a coin pull request is that the Dockerfile of the used blockchain node server has to be on the repository main branch of the [Cointainer](https://github.com/nugaon/cointainer) project.
