@@ -39,7 +39,7 @@
         "hapi": "^18.1.0",
         "hapi-swagger": "^9.4.2",
         "inversify": "^5.0.1",
-        "mongoose": "^5.5.3",
+        "mongoose": "^5.7.5",
         "node-cron": "^2.0.3",
         "node-fetch": "^2.6.0",
         "pg": "^7.12.1",
