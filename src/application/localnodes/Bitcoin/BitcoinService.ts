@@ -10,15 +10,14 @@ export class BitcoinService {
     private priorityConfirmationBlocks: Object;
     private changeAddress: string; //the change is going to arrive this address after the transaction.
     private useSmartFee: boolean;
+    private usePriorities: boolean;
 
-    constructor(config: ILocalNodeConfig = null, bitcoinClient: Client = null, useSmartFee: boolean = true) {
+    constructor(config: ILocalNodeConfig = null, useSmartFee: boolean = true) {
 
         if (config === undefined) {
             throw new Error("The Bitcoin localnode configuration not set.");
         }
-        if (bitcoinClient) {
-            this.client = bitcoinClient;
-        } else if (config) {
+        if (config) {
             this.client = new Client(config.rpcClient);
             console.log(`The Bitcoin Service initialized.`);
         } else {
@@ -26,9 +25,9 @@ export class BitcoinService {
         }
 
         this.priorityConfirmationBlocks = config.transactionPriority;
-        this.changeAddress = config.changeAddress;
+        // this.changeAddress = config.changeAddress;
         this.useSmartFee = useSmartFee;
-
+        this.usePriorities = config.withdraw && config.withdraw.usePriorities ? config.withdraw.usePriorities : false;
     }
 
     public async onInit() {
@@ -42,18 +41,14 @@ export class BitcoinService {
     * @return {string} address
     */
     public async generateAccount(account: string) {
-        return this.client.getAccountAddress(account);
+        return this.client.getNewAddress(account);
     }
 
     /**
     * Get accounts that the wallet contains
     */
     public async getAccounts(): Promise<any> {
-        let result = [];
-        Object.keys(await this.client.listAccounts()).forEach(function (account: string) {
-            result.push(account);
-        });
-        return result;
+        return this.client.listLabels();
     }
 
     /**
@@ -80,24 +75,7 @@ export class BitcoinService {
     * @return {string} balance in btc
     */
     public async getGlobalBalance(): Promise<string> {
-        let balance = 0;
-        let unspentTransactions: Array<IUnspentTransaction>;
-        unspentTransactions = await this.client.listUnspent();
-        if (unspentTransactions.length) {
-            unspentTransactions.forEach((unspentTransaction) => {
-                balance += this.roundBitcoin(unspentTransaction.amount);
-            });
-        }
-        return this.roundBitcoin(balance).toString();
-    }
-
-    /**
-    * Get the main account of the wallet
-    *
-    * @return {string} account
-    */
-    public async getMainAccount(): Promise<string> {
-        return this.client.getAccountAddress("");
+        return this.client.getBalance();
     }
 
     /**
@@ -153,7 +131,7 @@ export class BitcoinService {
             } else {
                 for (const detail of transaction.details) {
                     if((addressGiven && detail.address.toLowerCase() === addressOrAccount.toLowerCase())
-                    || detail.account === addressOrAccount) {
+                    || detail.label === addressOrAccount) {
                         transaction.amount = detail.amount + "";
                         switch (detail.category) {
                             case "send":
@@ -199,13 +177,13 @@ export class BitcoinService {
     ): Promise<Array<IBitcoinTransaction>> {
         const offset = options && options.offset ? options.offset : 20;
         const page = options && options.page ? options.page - 1 : 0;
-        const accontTransactions = await this.client.listTransactions(addressOrAccount, offset, page);
+        const accontTransactions = await this.client.listTransactions(addressOrAccount, offset, page * offset);
 
         //add sended transactions also which listed in the root account
-        let sentFromMainAccountTransactions: Array<IBitcoinTransaction> = await this.client.listTransactions("", offset, page);
+        let sentFromMainAccountTransactions: Array<IBitcoinTransaction> = await this.client.listTransactions("*", offset, page * offset);
         if (sentFromMainAccountTransactions.length) {
             sentFromMainAccountTransactions = sentFromMainAccountTransactions.filter((transansaction) => {
-                return transansaction.account === addressOrAccount && transansaction.category === "send";
+                return transansaction.label === addressOrAccount && transansaction.category === "send";
             });
         }
         let returnableTransactions = accontTransactions.concat(sentFromMainAccountTransactions);
@@ -228,7 +206,7 @@ export class BitcoinService {
     public async listUnspentTransactions(addressOrAccount: string = null, account: boolean = false): Promise<Array<IUnspentTransaction>> {
         let unspent: Array<IUnspentTransaction> = await this.client.listUnspent();
         if (account) {
-            unspent = unspent.filter((unspentTransaction) => unspentTransaction.account === addressOrAccount);
+            unspent = unspent.filter((unspentTransaction) => unspentTransaction.label === addressOrAccount);
         } else {
             unspent = unspent.filter((unspentTransaction) => unspentTransaction.address === addressOrAccount);
         }
@@ -258,50 +236,65 @@ export class BitcoinService {
 
         const subFee = options.subFee ? options.subFee : false;
 
-        const changeAddress = options.changeAddress ? options.changeAddress : this.changeAddress;
-        if (changeAddress === sendTo) {
-            throw Boom.notAcceptable("The change address is indentical to sendTo address");
-        }
-
-        let unspentTransactions: Array<IUnspentTransaction>;
-        if (!sendFrom) {
-            unspentTransactions = await this.client.listUnspent();
-        } else {
-            unspentTransactions = await this.listUnspentTransactions(sendFrom, !await this.isAddress(sendFrom));
-        }
-
-        const listTransactions = [];
-        let transactionAmount = 0;
-        let amountNumber = +amount;
-        //no ask for globalbalance (HTTP call), work with unspent transactions which are necessary.
-        if (unspentTransactions.length > 0) {
-            unspentTransactions.some((unspentTransaction) => {
-
-                listTransactions.push({
-                    txid: unspentTransaction.txid,
-                    vout: unspentTransaction.vout
-                });
-                transactionAmount += parseFloat(unspentTransaction.amount);
-                return transactionAmount >= amountNumber;
-            });
-            if (amountNumber <= transactionAmount) {
-                try {
-                    const fee = await this.calculateTxFee(priority);
-                    const rawTransactionId = await this.createRawTransaction(listTransactions, sendTo, amountNumber, fee, subFee);
-                    const fundRawTransaction = await this.fundRawTransaction(rawTransactionId, changeAddress);
-                    const signedRawTransaction = await this.signRawTransaction(fundRawTransaction);
-                    const sendedTxId = await this.sendRawTransaction(signedRawTransaction);
-                    return sendedTxId;
-                } catch (e) {
-                    throw Boom.notAcceptable(e.message);
-                }
+        ///Create more easily withdraws.
+        try {
+            if(this.usePriorities) {
+                const fee = await this.calculateTxFee(priority);
+                await this.client.setTxFee(fee);
             }
-            else {
-                throw Boom.notAcceptable(`Insufficient funds. Requested for ${amountNumber} and only have ${transactionAmount}`);
-            }
-        } else {
-            throw Boom.notAcceptable("No unspent transaction available.");
+
+            const txid: string = this.client.sendToAddress(sendTo, +amount, "", "", subFee);
+            return txid;
+        } catch(e) {
+            console.log(`transaction has not been happened for ${sendTo} ; ${amount}`)
+            throw Boom.notAcceptable(e.message);
         }
+
+        //TODO refactor this codeblock to generate the changeaddresses at witdrawals.
+        // const changeAddress = options.changeAddress ? options.changeAddress : this.changeAddress;
+        // if (changeAddress === sendTo) {
+        //     throw Boom.notAcceptable("The change address is indentical to sendTo address");
+        // }
+        //
+        // let unspentTransactions: Array<IUnspentTransaction>;
+        // if (!sendFrom) {
+        //     unspentTransactions = await this.client.listUnspent();
+        // } else {
+        //     unspentTransactions = await this.listUnspentTransactions(sendFrom, !await this.isAddress(sendFrom));
+        // }
+        //
+        // const listTransactions = [];
+        // let transactionAmount = 0;
+        // let amountNumber = +amount;
+        // //no ask for globalbalance (HTTP call), work with unspent transactions which are necessary.
+        // if (unspentTransactions.length > 0) {
+        //     unspentTransactions.some((unspentTransaction) => {
+        //
+        //         listTransactions.push({
+        //             txid: unspentTransaction.txid,
+        //             vout: unspentTransaction.vout
+        //         });
+        //         transactionAmount += parseFloat(unspentTransaction.amount);
+        //         return transactionAmount >= amountNumber;
+        //     });
+        //     if (amountNumber <= transactionAmount) {
+        //         try {
+        //             const fee = await this.calculateTxFee(priority);
+        //             const rawTransactionId = await this.createRawTransaction(listTransactions, sendTo, amountNumber, fee, subFee);
+        //             const fundRawTransaction = await this.fundRawTransaction(rawTransactionId, changeAddress);
+        //             const signedRawTransaction = await this.signRawTransaction(fundRawTransaction);
+        //             const sendedTxId = await this.sendRawTransaction(signedRawTransaction);
+        //             return sendedTxId;
+        //         } catch (e) {
+        //             throw Boom.notAcceptable(e.message);
+        //         }
+        //     }
+        //     else {
+        //         throw Boom.notAcceptable(`Insufficient funds. Requested for ${amountNumber} and only have ${transactionAmount}`);
+        //     }
+        // } else {
+        //     throw Boom.notAcceptable("No unspent transaction available.");
+        // }
     }
 
     /**
@@ -333,14 +326,14 @@ export class BitcoinService {
             switch (detail.category) {
                 case "send":
                     returnableTransaction.from = detail.address;
-                    returnableTransaction.additionalInfo.fromAccount = detail.account;
+                    returnableTransaction.additionalInfo.fromAccount = detail.label;
                     break;
                 case "receive":
                     if(detail.address === this.changeAddress) {
                         continue;
                     }
                     returnableTransaction.to = detail.address;
-                    returnableTransaction.additionalInfo.toAccount = detail.account;
+                    returnableTransaction.additionalInfo.toAccount = detail.label;
                     break;
             }
         }
@@ -352,6 +345,7 @@ export class BitcoinService {
         if (this.useSmartFee) {
             const confirmations = this.priorityConfirmationBlocks[priority];
             const fee = await this.client.estimateSmartFee(confirmations);
+            console.log("fee1", fee);
             return fee.feerate;
         }
         else {

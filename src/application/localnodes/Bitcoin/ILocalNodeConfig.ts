@@ -6,9 +6,13 @@ export interface ILocalNodeConfig {
         port: number;
     };
     transactionPriority?: {     //how many blocks have to wait until the transaction will processed.
-        HIGH: number;           
+        HIGH: number;
         MEDIUM: number;
         LOW: number;
     };
-    changeAddress?: string;      ////  the change is going to arrive this address after the transaction.
+    withdraw?: {
+        // changeAddress?: string;      ////  the change is going to arrive this address after the transaction.
+        usePriorities?: boolean;
+    }
+
 }

@@ -30,9 +30,8 @@ export class BitcoinController implements ICryptoCurrency {
     }
 
     public async getGlobalBalance() {
-        const account = await this.service.getMainAccount();
         const balance = await this.service.getGlobalBalance();
-        return {account: account, balance: balance};
+        return {account: "<ALL>", balance: balance};
     }
 
     public async getTransaction(txid: string) {

@@ -2,7 +2,8 @@ export interface IUnspentTransaction {
     txid: string;
     vout: number;
     address: string;
-    account?: string;
+    account?: string; //older versions
+    label?: string; //newer versions
     scriptPubKey: string;
     amount: string;
     confirmations: number;
@@ -13,7 +14,8 @@ export interface IUnspentTransaction {
 }
 
 export interface IBitcoinTransaction {
-    account: string;
+    account?: string; //older versions
+    label?: string; //newer versions
     address: string;
     category: "send" | "receive" | "move";
     amount: string;
@@ -48,11 +50,11 @@ export interface IBitcoinTransactionNative {
 }
 
 export interface ITransactionDetail {
-    account: string; //(string) DEPRECATED. The account name involved in the transaction; can be "" for the default account.
+    account?: string; //(string) DEPRECATED. The account name involved in the transaction; can be "" for the default account.
+    label: string;
     address: string;
     category: "send" | "receive";
     amount: number;
-    label: string;
     vout: number;
     fee?: number; //The amount of the fee in BTC. This is negative and only available for the 'send' category of transactions.
     abandoned?: boolean //only at send type

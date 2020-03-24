@@ -36,15 +36,11 @@ export const environment: AppConfiguration = {
         },
         {
             route: "bch",
-            class: "BitcoinCash"
+            class: "Bitcoin"
         },
         {
             route: "ltc",
-            class: "Litecoin"
-        },
-        {
-            route: "cpc",
-            class: "Capricoin"
+            class: "Bitcoin"
         },
         {
             route: "eos",
@@ -132,40 +128,6 @@ export const environment: AppConfiguration = {
                 port: 18332
             },
             changeAddress: "2N7mEzme1wKqswU99dmzW6UPykaAMWYXhyB",
-            transactionPriority: {
-                HIGH: 1,
-                MEDIUM: 5,
-                LOW: 10
-
-            },
-        },
-        BitcoinCash: {
-            rpcClient: {
-                username: "cointainer",
-                password: "pCpXJwIE15M3N4I5C4pZFyNmdlNACMykrVQ3OilVf8I=",
-                network: "testnet",
-                port: 18442
-            },
-            changeAddress: "bchtest:qpqwcv8j5du0vk4sztama752sfk4rdytaqyqn42aj3",
-        },
-        Capricoin: {
-            rpcClient: {
-                //username: "cointainer",
-                //password: "pCpXJwIE15M3N4I5C4pZFyNmdlNACMykrVQ3OilVf8I=",
-                username: "foo",
-                password: "SUPERSECRETPASSWORD",
-                network: "mainnet",
-                port: 22713,
-            },
-        },
-        Litecoin: {
-            rpcClient: {
-                username: "cointainer",
-                password: "pCpXJwIE15M3N4I5C4pZFyNmdlNACMykrVQ3OilVf8I=",
-                network: "testnet",
-                port: 19332
-            },
-            changeAddress: "QgAphnEhon4VxKPFMHUnwRJMTT1QZjVn2r",
             transactionPriority: {
                 HIGH: 1,
                 MEDIUM: 5,
