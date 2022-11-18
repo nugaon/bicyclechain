@@ -63,6 +63,6 @@
         "typescript": "^3.8.3",
         "vision": "^5.4.4",
         "webpack": "^4.42.0",
-        "webpack-cli": "^3.3.11"
+        "webpack-cli": "^3.3.12"
     }
 }
